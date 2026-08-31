@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ff716c",
+                    "inverse-on-surface": "#4d556b",
+                    "on-secondary-fixed": "#493656",
+                    "primary-dim": "#93c3ef",
+                    "on-surface": "#dee5ff",
+                    "on-secondary-fixed-variant": "#665274",
+                    "on-secondary-container": "#e1c7ef",
+                    "surface-container-lowest": "#000000",
+                    "tertiary-dim": "#eda0bc",
+                    "on-tertiary-container": "#642b43",
+                    "surface-bright": "#1f2b49",
+                    "secondary-fixed": "#f1d6ff",
+                    "on-tertiary": "#6f344d",
+                    "surface-tint": "#a1d1fe",
+                    "on-secondary": "#5c486a",
+                    "on-primary-fixed": "#003351",
+                    "on-error-container": "#ffa8a3",
+                    "surface-container-highest": "#192540",
+                    "tertiary": "#ffc1d6",
+                    "inverse-primary": "#31638a",
+                    "outline": "#6d758c",
+                    "tertiary-fixed": "#fdadca",
+                    "error-container": "#9f0519",
+                    "secondary-dim": "#e2c8f0",
+                    "tertiary-container": "#fdadca",
+                    "primary-container": "#75a5d0",
+                    "surface": "#060e20",
+                    "secondary": "#f1d6ff",
+                    "secondary-fixed-dim": "#e2c8f0",
+                    "on-primary-container": "#00253d",
+                    "inverse-surface": "#faf8ff",
+                    "on-error": "#490006",
+                    "primary": "#a1d1fe",
+                    "surface-variant": "#192540",
+                    "secondary-container": "#533f60",
+                    "on-primary-fixed-variant": "#1a5177",
+                    "outline-variant": "#40485d",
+                    "on-surface-variant": "#a3aac4",
+                    "on-tertiary-fixed": "#4b172f",
+                    "surface-container-high": "#141f38",
+                    "on-background": "#dee5ff",
+                    "on-primary": "#0a476d",
+                    "surface-container": "#0f1930",
+                    "on-tertiary-fixed-variant": "#6f344c",
+                    "primary-fixed-dim": "#93c3ef",
+                    "primary-fixed": "#a1d1fe",
+                    "surface-dim": "#060e20",
+                    "background": "#060e20",
+                    "surface-container-low": "#091328",
+                    "tertiary-fixed-dim": "#eda0bc",
+                    "error-dim": "#d7383b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(15, 25, 48, 0.7);
+            backdrop-filter: blur(24px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-tertiary selection:text-on-tertiary">
+<!-- Background Content (Simulated 'Vault' Screen) -->
+<div class="fixed inset-0 z-0 overflow-hidden px-6 pt-24">
+<!-- Header from JSON -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-slate-950/80 backdrop-blur-xl shadow-2xl shadow-blue-900/20">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-blue-200" data-icon="shield_with_heart">shield_with_heart</span>
+<h1 class="font-manrope font-bold tracking-tight text-xl text-blue-200">Harmonious Shield</h1>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-bright flex items-center justify-center border border-outline-variant/20 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="close-up portrait of a professional man with a friendly expression in soft studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDy8QfEM4xXRq0RIRuL_ETkmC1Up3k97dKRL1F4mhjdT69TDN8QeRIg4TIZoEOJgScWNziPgQIN1i3AIf4iG-fwnC9emHhndLxayOjrWylsMQ-DtQz0SPG1SwugHyyklq7hkXAuO5OwA2l7CvZurD5srMoVOsufsye_ozFlAcB87bqRKWfE_9QK4_bUKJFqFwXbMRLR_a24w1MDyrKoprFnTWEqu0SlL4h0ICLacwZGvLDBlPj737eb-_cB_n_zRLFObsrWBnVrMuJ4"/>
+</div>
+</header>
+<!-- Bento Grid Content - Simulated Vault -->
+<div class="max-w-4xl mx-auto space-y-8 opacity-40 grayscale-[0.5] scale-[0.98]">
+<div class="flex flex-col gap-4">
+<h2 class="text-3xl font-headline font-extrabold tracking-tight">Your Secure Vault</h2>
+<p class="text-on-surface-variant max-w-md">Encrypted recordings and activity logs protected by the Ethereal Guardian.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Recording Card 1 -->
+<div class="p-6 rounded-lg bg-surface-container-high border border-outline-variant/10">
+<div class="flex items-center justify-between mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="videocam">videocam</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-secondary">Locked</span>
+</div>
+<div class="h-32 w-full bg-surface-container rounded mb-4 overflow-hidden">
+<div class="w-full h-full bg-gradient-to-tr from-surface-bright to-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl opacity-20" data-icon="play_circle">play_circle</span>
+</div>
+</div>
+<p class="font-bold text-sm">Security_Feed_042.mp4</p>
+<p class="text-xs text-on-surface-variant">24 Oct 2023 • 14:20</p>
+</div>
+<!-- Recording Card 2 -->
+<div class="p-6 rounded-lg bg-surface-container-high border border-outline-variant/10">
+<div class="flex items-center justify-between mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="videocam">videocam</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-secondary">Locked</span>
+</div>
+<div class="h-32 w-full bg-surface-container rounded mb-4 overflow-hidden">
+<div class="w-full h-full bg-gradient-to-tr from-surface-bright to-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl opacity-20" data-icon="play_circle">play_circle</span>
+</div>
+</div>
+<p class="font-bold text-sm">Main_Entrance_Log.mp4</p>
+<p class="text-xs text-on-surface-variant">23 Oct 2023 • 09:15</p>
+</div>
+<!-- Recording Card 3 -->
+<div class="p-6 rounded-lg bg-surface-container-high border border-outline-variant/10">
+<div class="flex items-center justify-between mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="videocam">videocam</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-secondary">Locked</span>
+</div>
+<div class="h-32 w-full bg-surface-container rounded mb-4 overflow-hidden">
+<div class="w-full h-full bg-gradient-to-tr from-surface-bright to-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl opacity-20" data-icon="play_circle">play_circle</span>
+</div>
+</div>
+<p class="font-bold text-sm">Backyard_Motion.mp4</p>
+<p class="text-xs text-on-surface-variant">22 Oct 2023 • 23:45</p>
+</div>
+</div>
+</div>
+<!-- Bottom NavBar from JSON (Inactive State for Background) -->
+<nav class="fixed bottom-6 left-0 right-0 z-10 flex justify-around items-center bg-slate-900/90 backdrop-blur-md shadow-2xl shadow-blue-950 rounded-full px-4 py-2 w-[90%] max-w-md mx-auto pointer-events-none opacity-40">
+<div class="flex flex-col items-center justify-center text-slate-400 p-3">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 p-3">
+<span class="material-symbols-outlined" data-icon="videocam">videocam</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope">Record</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-blue-400/20 text-blue-200 rounded-full p-3">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope">Vault</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 p-3">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope">Settings</span>
+</div>
+</nav>
+</div>
+<!-- Modal Overlay -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center px-6">
+<!-- Backdrop Blur Layer -->
+<div class="absolute inset-0 bg-surface/60 backdrop-blur-md"></div>
+<!-- Confirmation Dialog -->
+<div class="relative w-full max-w-sm glass-panel rounded-lg shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border border-outline-variant/10 p-8 flex flex-col items-center text-center">
+<!-- Icon Cluster -->
+<div class="relative mb-8">
+<div class="absolute inset-0 bg-tertiary/20 blur-3xl rounded-full"></div>
+<div class="relative h-20 w-20 rounded-full bg-surface-container-highest border border-tertiary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl text-tertiary" data-icon="shield_with_heart" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+<div class="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-tertiary flex items-center justify-center shadow-lg shadow-tertiary/20">
+<span class="material-symbols-outlined text-on-tertiary text-lg font-bold" data-icon="help">help</span>
+</div>
+</div>
+</div>
+<!-- Content -->
+<div class="space-y-3 mb-10">
+<h2 class="text-2xl font-headline font-extrabold tracking-tight text-on-surface">¿Eliminar Grabación?</h2>
+<p class="text-on-surface-variant leading-relaxed">Esta acción es irreversible y el archivo se borrará permanentemente del servidor seguro.</p>
+</div>
+<!-- Actions -->
+<div class="w-full space-y-4">
+<button class="w-full py-4 rounded-full bg-gradient-to-r from-tertiary to-tertiary-dim text-on-tertiary font-label font-extrabold tracking-widest shadow-xl shadow-tertiary/10 active:scale-[0.98] transition-all">
+                    CONFIRMAR
+                </button>
+<button class="w-full py-4 rounded-full border border-outline-variant/30 text-on-surface-variant font-label font-extrabold tracking-widest hover:bg-surface-container-high/50 active:scale-[0.98] transition-all">
+                    CANCELAR
+                </button>
+</div>
+<!-- Decorative Ethereal Guardian Element -->
+<div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-tertiary/40 to-transparent blur-sm"></div>
+</div>
+</div>
+</body></html>

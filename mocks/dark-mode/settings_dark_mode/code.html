@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Harmonious Shield - Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ff716c",
+                    "inverse-on-surface": "#4d556b",
+                    "on-secondary-fixed": "#493656",
+                    "primary-dim": "#93c3ef",
+                    "on-surface": "#dee5ff",
+                    "on-secondary-fixed-variant": "#665274",
+                    "on-secondary-container": "#e1c7ef",
+                    "surface-container-lowest": "#000000",
+                    "tertiary-dim": "#eda0bc",
+                    "on-tertiary-container": "#642b43",
+                    "surface-bright": "#1f2b49",
+                    "secondary-fixed": "#f1d6ff",
+                    "on-tertiary": "#6f344d",
+                    "surface-tint": "#a1d1fe",
+                    "on-secondary": "#5c486a",
+                    "on-primary-fixed": "#003351",
+                    "on-error-container": "#ffa8a3",
+                    "surface-container-highest": "#192540",
+                    "tertiary": "#ffc1d6",
+                    "inverse-primary": "#31638a",
+                    "outline": "#6d758c",
+                    "tertiary-fixed": "#fdadca",
+                    "error-container": "#9f0519",
+                    "secondary-dim": "#e2c8f0",
+                    "tertiary-container": "#fdadca",
+                    "primary-container": "#75a5d0",
+                    "surface": "#060e20",
+                    "secondary": "#f1d6ff",
+                    "secondary-fixed-dim": "#e2c8f0",
+                    "on-primary-container": "#00253d",
+                    "inverse-surface": "#faf8ff",
+                    "on-error": "#490006",
+                    "primary": "#a1d1fe",
+                    "surface-variant": "#192540",
+                    "secondary-container": "#533f60",
+                    "on-primary-fixed-variant": "#1a5177",
+                    "outline-variant": "#40485d",
+                    "on-surface-variant": "#a3aac4",
+                    "on-tertiary-fixed": "#4b172f",
+                    "surface-container-high": "#141f38",
+                    "on-background": "#dee5ff",
+                    "on-primary": "#0a476d",
+                    "surface-container": "#0f1930",
+                    "on-tertiary-fixed-variant": "#6f344c",
+                    "primary-fixed-dim": "#93c3ef",
+                    "primary-fixed": "#a1d1fe",
+                    "surface-dim": "#060e20",
+                    "background": "#060e20",
+                    "surface-container-low": "#091328",
+                    "tertiary-fixed-dim": "#eda0bc",
+                    "error-dim": "#d7383b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            backdrop-filter: blur(20px);
+            background: rgba(15, 25, 48, 0.7);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-xl shadow-2xl shadow-blue-900/20 flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-blue-200" data-icon="shield_with_heart">shield_with_heart</span>
+<span class="font-manrope font-bold tracking-tight text-xl text-blue-200">Harmonious Shield</span>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="portrait of a professional woman with a calm expression, soft studio lighting, high-end editorial photography style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2Pot8FOWN5P-LYwIPbGZ6-SQt2Y3FE0HCzgYN4rDi3lcX28QWZtCBDXfC3y73RKbelU6BAkGWO-KJc4BykVL8lIKq-W9OSmmChdJMc4cvat-gPIQCsBxyiSgbfTUftDICy5k5SS7i1xTTLGUGeVIdHkKfzThIscgZR6pXb1kt6Sg_1yBnRpvEugH6WG6tDZBK7hkJ0AuxoLbUVsTYEYaMM_dp3fIFDDiGhQEcUhm1_0WuDOYuWqBiKdR7_OchX9zGRZfJ9-UxjAkw"/>
+</div>
+</header>
+<main class="pt-24 px-6 max-w-2xl mx-auto space-y-8">
+<!-- Profile Header -->
+<section class="relative overflow-hidden p-8 rounded-xl bg-surface-container-low border border-outline-variant/10">
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+<div class="flex flex-col items-center md:flex-row md:items-end gap-6 relative z-10">
+<div class="relative">
+<div class="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-primary via-secondary to-tertiary">
+<div class="w-full h-full rounded-full overflow-hidden border-4 border-surface-container-low">
+<img alt="Elena Harmon" class="w-full h-full object-cover" data-alt="close up portrait of a elegant woman with sophisticated lighting and deep navy background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTgX1eGIASVPDi_qVIGKTnzyNjRtHaPViogRodGDEyEy78gfvJflO_ttQf35zhN08x3Dnt60y5rtN2agMvF2sStProZOVpUu1mCc9rct5xzQw41j6kQleYuqGWlLQxr3qfsTVvBXE90ELtk_HEV6gdwUpapXAbuZa_RDTKvRZnjNPry7fF14RoIOf24n4Z8pN6QgKRZcUb5x5cgH-eHix_1yeZhm1vKjf98Bl-M_ACDtuKHEDEYJrLP6FJTsRNSsi9wWggqljI8l9g"/>
+</div>
+</div>
+<div class="absolute bottom-0 right-0 bg-primary text-on-primary p-1.5 rounded-full shadow-lg">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div class="text-center md:text-left flex-1">
+<h1 class="text-3xl font-extrabold tracking-tight text-on-surface mb-1">Elena Harmon</h1>
+<p class="text-on-surface-variant font-medium mb-4">Premium Guardian Member</p>
+<div class="inline-flex items-center gap-3 px-4 py-2 bg-surface-container-highest rounded-full">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-sm font-bold tracking-wide uppercase text-primary">Security Score 98%</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Privacy & Security Section -->
+<section class="space-y-4">
+<h2 class="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant px-2">Privacy &amp; Security</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Vault Password -->
+<button class="flex items-center gap-4 p-5 bg-surface-container rounded-xl hover:bg-surface-container-high transition-all group text-left">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+</div>
+<div>
+<div class="font-bold text-on-surface">Vault Password</div>
+<div class="text-xs text-on-surface-variant">Last changed 2d ago</div>
+</div>
+</button>
+<!-- Biometrics -->
+<button class="flex items-center gap-4 p-5 bg-surface-container rounded-xl hover:bg-surface-container-high transition-all group text-left">
+<div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+</div>
+<div>
+<div class="font-bold text-on-surface">Biometrics</div>
+<div class="text-xs text-on-surface-variant">FaceID &amp; TouchID Active</div>
+</div>
+</button>
+<!-- Notifications -->
+<button class="flex items-center gap-4 p-5 bg-surface-container rounded-xl hover:bg-surface-container-high transition-all group text-left">
+<div class="w-12 h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</div>
+<div>
+<div class="font-bold text-on-surface">Notifications</div>
+<div class="text-xs text-on-surface-variant">Critical alerts only</div>
+</div>
+</button>
+<!-- App Language -->
+<button class="flex items-center gap-4 p-5 bg-surface-container rounded-xl hover:bg-surface-container-high transition-all group text-left">
+<div class="w-12 h-12 rounded-full bg-primary-dim/10 flex items-center justify-center text-primary-dim group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="translate">translate</span>
+</div>
+<div>
+<div class="font-bold text-on-surface">App Language</div>
+<div class="text-xs text-on-surface-variant">English (US)</div>
+</div>
+</button>
+</div>
+</section>
+<!-- Danger Zone -->
+<section class="pt-8 pb-12 flex flex-col items-center">
+<button class="group flex items-center gap-2 px-8 py-3 rounded-full border border-tertiary/30 text-tertiary font-bold tracking-widest uppercase text-xs hover:bg-tertiary hover:text-on-tertiary transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="logout">logout</span>
+                Log Out
+            </button>
+<p class="mt-6 text-[10px] text-on-surface-variant tracking-widest uppercase opacity-40">Harmonious Shield v2.4.0 • Secured by Ethereal Guardian</p>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-0 right-0 z-50 flex justify-around items-center">
+<div class="bg-slate-900/90 backdrop-blur-md shadow-2xl shadow-blue-950 w-[90%] max-w-md rounded-full px-4 py-2 flex justify-around items-center">
+<a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-pink-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-pink-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="videocam">videocam</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope mt-1">Record</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-pink-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="lock">lock</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope mt-1">Vault</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-blue-400/20 text-blue-200 rounded-full p-3 hover:text-pink-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="text-[10px] uppercase font-bold tracking-widest font-manrope mt-1">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>

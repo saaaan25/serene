@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Harmonious Shield - Secure Access</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ff716c",
+                        "inverse-on-surface": "#4d556b",
+                        "on-secondary-fixed": "#493656",
+                        "primary-dim": "#93c3ef",
+                        "on-surface": "#dee5ff",
+                        "on-secondary-fixed-variant": "#665274",
+                        "on-secondary-container": "#e1c7ef",
+                        "surface-container-lowest": "#000000",
+                        "tertiary-dim": "#eda0bc",
+                        "on-tertiary-container": "#642b43",
+                        "surface-bright": "#1f2b49",
+                        "secondary-fixed": "#f1d6ff",
+                        "on-tertiary": "#6f344d",
+                        "surface-tint": "#a1d1fe",
+                        "on-secondary": "#5c486a",
+                        "on-primary-fixed": "#003351",
+                        "on-error-container": "#ffa8a3",
+                        "surface-container-highest": "#192540",
+                        "tertiary": "#ffc1d6",
+                        "inverse-primary": "#31638a",
+                        "outline": "#6d758c",
+                        "tertiary-fixed": "#fdadca",
+                        "error-container": "#9f0519",
+                        "secondary-dim": "#e2c8f0",
+                        "tertiary-container": "#fdadca",
+                        "primary-container": "#75a5d0",
+                        "surface": "#060e20",
+                        "secondary": "#f1d6ff",
+                        "secondary-fixed-dim": "#e2c8f0",
+                        "on-primary-container": "#00253d",
+                        "inverse-surface": "#faf8ff",
+                        "on-error": "#490006",
+                        "primary": "#a1d1fe",
+                        "surface-variant": "#192540",
+                        "secondary-container": "#533f60",
+                        "on-primary-fixed-variant": "#1a5177",
+                        "outline-variant": "#40485d",
+                        "on-surface-variant": "#a3aac4",
+                        "on-tertiary-fixed": "#4b172f",
+                        "surface-container-high": "#141f38",
+                        "on-background": "#dee5ff",
+                        "on-primary": "#0a476d",
+                        "surface-container": "#0f1930",
+                        "on-tertiary-fixed-variant": "#6f344c",
+                        "primary-fixed-dim": "#93c3ef",
+                        "primary-fixed": "#a1d1fe",
+                        "surface-dim": "#060e20",
+                        "background": "#060e20",
+                        "surface-container-low": "#091328",
+                        "tertiary-fixed-dim": "#eda0bc",
+                        "error-dim": "#d7383b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #faf8ff;
+            font-family: 'Manrope', sans-serif;
+            color: #192540;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-input {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(147, 195, 239, 0.4);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(161, 209, 254, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+        }
+        .ethereal-glow {
+            box-shadow: 0 0 40px -10px rgba(161, 209, 254, 0.3);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="min-h-screen selection:bg-primary/30">
+<!-- Top Navigation Anchor (Suppressing shell per task: transactional page) -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-white/80 backdrop-blur-xl shadow-xl shadow-blue-900/5 border-b border-slate-100">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-2xl">shield_with_heart</span>
+<span class="text-xl font-bold text-slate-800 tracking-tight">Harmonious Shield</span>
+</div>
+<div class="hidden md:flex gap-8 text-sm font-bold tracking-widest uppercase text-slate-500">
+<span class="text-primary-container cursor-pointer">Security</span>
+<span class="hover:text-primary-container transition-colors cursor-pointer">Privacy</span>
+<span class="hover:text-primary-container transition-colors cursor-pointer">Support</span>
+</div>
+</header>
+<main class="relative pt-24 pb-12 px-6 overflow-hidden min-h-screen flex flex-col items-center justify-center">
+<!-- Abstract Background Orbs -->
+<div class="absolute -top-24 -left-24 w-96 h-96 bg-primary/30 rounded-full blur-[120px]"></div>
+<div class="absolute top-1/2 -right-24 w-80 h-80 bg-tertiary/20 rounded-full blur-[100px]"></div>
+<div class="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[600px] h-64 bg-secondary/30 rounded-full blur-[120px]"></div>
+<div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-start relative z-10">
+<!-- Login Section -->
+<section class="glass-card rounded-xl p-8 md:p-12 ethereal-glow">
+<div class="mb-10">
+<h1 class="text-4xl md:text-5xl font-extrabold tracking-tighter text-slate-900 mb-2">Welcome back</h1>
+<p class="text-slate-600 font-medium">Re-enter the circle of protection.</p>
+</div>
+<form class="space-y-6">
+<div class="space-y-2">
+<label class="block text-[10px] uppercase font-bold tracking-widest text-primary-container px-1">Email Address</label>
+<input class="w-full glass-input rounded-full px-6 py-4 focus:ring-2 focus:ring-primary/40 focus:outline-none transition-all placeholder:text-slate-400 text-slate-900" placeholder="guardian@shield.com" type="email"/>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center px-1">
+<label class="block text-[10px] uppercase font-bold tracking-widest text-primary-container">Password</label>
+<a class="text-[10px] uppercase font-bold tracking-widest text-tertiary-container hover:opacity-80 transition-opacity" href="#">Forgot?</a>
+</div>
+<input class="w-full glass-input rounded-full px-6 py-4 focus:ring-2 focus:ring-primary/40 focus:outline-none transition-all placeholder:text-slate-400 text-slate-900" placeholder="••••••••" type="password"/>
+</div>
+<button class="w-full py-4 rounded-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold tracking-tight text-lg shadow-xl shadow-primary/20 active:scale-95 duration-200 mt-4">
+                        Access Vault
+                    </button>
+</form>
+<div class="relative my-10">
+<div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+<div class="relative flex justify-center text-[10px] uppercase tracking-[0.2em] font-bold"><span class="bg-white px-4 text-slate-500">Or continue with</span></div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-3 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 text-slate-700">
+<img alt="Google" class="w-5 h-5" data-alt="Minimalist colorful Google icon for third party authentication on a dark interface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBwpERBkf-uG_Fskl5qPiTF2631aubh5rUprD711r6ZQm3ae8EGmpofaDuOaIGODHt2j1p_R0qxr3jQszhCAPgAwn-w6TvNIdYfRIJdvBTuhRVsBIZ7wA4xtc8iTKcXEQ-FgWy489S2cgnlLqX_gR_Fj-72bu9GPJlWKD9Iu0l6kTaq3FnuJdidVdQ1x6oH6c9MZ-r7IKWMjblZGC4aeTn67z5UUGEt8yQmfVaeOSo9A5E9mabgRoWKKJX3bFpMDo5e8wXK0IOlqvP7"/>
+<span class="text-xs font-bold uppercase tracking-widest">Google</span>
+</button>
+<button class="flex items-center justify-center gap-3 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 text-slate-700">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">ios</span>
+<span class="text-xs font-bold uppercase tracking-widest">Apple</span>
+</button>
+</div>
+</section>
+<!-- Signup Section -->
+<section class="glass-card rounded-xl p-8 md:p-12 ethereal-glow border-t-2 border-t-tertiary/30">
+<div class="mb-10">
+<h2 class="text-4xl md:text-5xl font-extrabold tracking-tighter text-slate-900 mb-2">Create account</h2>
+<p class="text-slate-600 font-medium">Join the sanctuary of digital peace.</p>
+</div>
+<form class="space-y-5">
+<div class="space-y-2">
+<label class="block text-[10px] uppercase font-bold tracking-widest text-tertiary-container px-1">Full Name</label>
+<input class="w-full glass-input rounded-full px-6 py-4 focus:ring-2 focus:ring-tertiary/40 focus:outline-none transition-all placeholder:text-slate-400 text-slate-900" placeholder="Alex Guardian" type="text"/>
+</div>
+<div class="space-y-2">
+<label class="block text-[10px] uppercase font-bold tracking-widest text-tertiary-container px-1">Email Address</label>
+<input class="w-full glass-input rounded-full px-6 py-4 focus:ring-2 focus:ring-tertiary/40 focus:outline-none transition-all placeholder:text-slate-400 text-slate-900" placeholder="guardian@shield.com" type="email"/>
+</div>
+<div class="space-y-2">
+<label class="block text-[10px] uppercase font-bold tracking-widest text-tertiary-container px-1">Secure Password</label>
+<input class="w-full glass-input rounded-full px-6 py-4 focus:ring-2 focus:ring-tertiary/40 focus:outline-none transition-all placeholder:text-slate-400 text-slate-900" placeholder="••••••••" type="password"/>
+</div>
+<div class="flex items-start gap-3 px-2 pt-2">
+<div class="mt-1 w-4 h-4 rounded-full border border-tertiary-container flex items-center justify-center cursor-pointer">
+<div class="w-2 h-2 rounded-full bg-tertiary-container"></div>
+</div>
+<p class="text-xs text-slate-600 leading-relaxed">
+                            I agree to the <span class="text-tertiary-container font-bold cursor-pointer">Guardian Terms</span> and understand how my data is protected.
+                        </p>
+</div>
+<button class="w-full py-4 rounded-full bg-gradient-to-r from-tertiary to-tertiary-dim text-on-tertiary-fixed font-bold tracking-tight text-lg shadow-xl shadow-tertiary/20 active:scale-95 duration-200 mt-4">
+                        Begin Journey
+                    </button>
+</form>
+<p class="mt-8 text-center text-xs text-slate-600">
+                    Already a member? <span class="text-primary-container font-bold cursor-pointer hover:underline">Log in here</span>
+</p>
+</section>
+</div>
+<!-- Descriptive Visual Accents -->
+<div class="mt-16 text-center max-w-lg mx-auto">
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 mb-6 shadow-sm">
+<span class="flex h-2 w-2 rounded-full bg-secondary-container animate-pulse"></span>
+<span class="text-[10px] uppercase tracking-widest font-bold text-secondary-container">End-to-End Encryption Active</span>
+</div>
+<div class="grid grid-cols-3 gap-8 grayscale opacity-60 hover:opacity-100 transition-opacity duration-700 invert">
+<img alt="ISO Certified" class="h-6 object-contain mx-auto" data-alt="Minimalist ISO security certification badge icon in clean white line art on a transparent background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJDSa3Z7HxzGibPGwlvN_J7llyzAHhvwkdT8mP_kNIymAyM_d0yGyUZa2JgGpxpC5OoaExSjvBA52C1wuK5aRdcgw4Lepkd6mtHLbXWhcqImwe20LhR7GD_dVt81Jwfst2mvBDzffSfepUOyBN3N8HPjpu4QVYURiCEDxzyJGiKZgIbKOR6GYVeCmUu6Z1vBiak8kWdGeWk2WqkwQOxjyYZZneh64-OoXBpAcnf7fZoD3D0ZpaXMUhcIQt3O8_7jlBVJ4VxM6ICfDa"/>
+<img alt="GDPR" class="h-6 object-contain mx-auto" data-alt="Minimalist GDPR compliance badge icon in clean white line art on a transparent background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLDiP2z-RBkiICgdQV3YHVnFiQUvPciKNtsiIoN6yTfj2D6t5TQGku5S2nTrU42M8sV7DiF6Brb_iif3X5vf_0lZHRnu9JO1EWyrmSs5VWdhlvvIckAdXcApw90oDFT9PNeNHS2Pr1G9AQIGBPUYqPjwcqEhrFd2-aAljkdRn_oGYJdhM3meZZwdnW-GXyOt1flNJXartqdXvYugq8k-huibQfkMJTQ2qmhE02mrTo2oMBTbzgEw1QHZIPbdgheKIQvBJ-XAqY4Ro-"/>
+<img alt="PCI" class="h-6 object-contain mx-auto" data-alt="Minimalist PCI DSS security standard icon in clean white line art on a transparent background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDT3k7RcTTcJjMqU3sLvlm1hBkVHiVuVsw_sodHo5yCWvu_GDkJrzIBSOt7CqxAOd-TvbDCignRVxce4xk2e39q7Muqd81rmLyb1rv39CTXmBt0WVCxOKbHdBfW06ESmnDutyX0g_Zut4BisAP0B7w2AMnvs84YthhK8FOj2-2icnKsj_Gk0yUt_nDJNx6LtxXrVupwLD0s8rAv77EBRrNOEA6ARF1B0y1lmvvRZ9N92g99vKcyo4TFKDgNzUO9wM-lVean_Mwvfb-f"/>
+</div>
+</div>
+</main>
+<!-- Footer Meta -->
+<footer class="pb-12 px-6 flex flex-col items-center gap-4 text-slate-500">
+<p class="text-[10px] uppercase tracking-[0.3em] font-bold">© 2024 Harmonious Shield. All rights reserved.</p>
+<div class="flex gap-6 text-[10px] uppercase font-bold tracking-widest">
+<a class="hover:text-primary-container transition-colors" href="#">Privacy</a>
+<a class="hover:text-primary-container transition-colors" href="#">Legal</a>
+<a class="hover:text-primary-container transition-colors" href="#">Cookies</a>
+</div>
+</footer>
+</body></html>
