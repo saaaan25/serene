@@ -1,0 +1,3 @@
+no_violence
+physical_violence
+verbal_violence
