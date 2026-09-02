@@ -1,4 +1,9 @@
 import 'package:get_it/get_it.dart';
+import 'package:serene/features/audio_monitoring/data/datasources/audio_stream_datasource.dart';
+import 'package:serene/features/audio_monitoring/data/datasources/tflite_inference_engine.dart';
+import 'package:serene/features/audio_monitoring/data/repositories/monitoring_repository_impl.dart';
+import 'package:serene/features/audio_monitoring/domain/repositories/monitoring_repository.dart';
+import 'package:serene/features/audio_monitoring/domain/usecases/process_audio_stream_usecase.dart';
 import '../core/crypto/cipher_manager.dart';
 import '../core/crypto/secure_key_storage.dart';
 import '../features/evidence_vault/data/datasources/evidence_local_datasource.dart';
@@ -14,7 +19,7 @@ Future<void> initServiceLocator() async {
   sl.registerLazySingleton<SecureKeyStorage>(() => SecureKeyStorage());
   sl.registerLazySingleton<CipherManager>(() => CipherManager());
 
-  // Evidence Vault
+  // FEATURE: Evidence Vault
   // Data sources
   sl.registerLazySingleton<EvidenceLocalDataSource>(
     () => EvidenceLocalDataSourceImpl(),
@@ -32,4 +37,21 @@ Future<void> initServiceLocator() async {
   // Use cases
   sl.registerLazySingleton(() => SaveEncryptedEvidenceUseCase(sl()));
   sl.registerLazySingleton(() => GetDecryptedAudioStreamUseCase(sl()));
+
+
+  // FEATURE: Audio Monitoring
+  // Data sources
+  sl.registerLazySingleton<TfliteInferenceEngine>(() => TfliteInferenceEngine());
+  sl.registerLazySingleton<AudioStreamDataSource>(() => AudioStreamDataSourceImpl());
+
+  // Repositories
+  sl.registerLazySingleton<MonitoringRepository>(
+    () => MonitoringRepositoryImpl(
+      audioStreamDataSource: sl(),
+      inferenceEngine: sl(),
+    ),
+  );
+
+  // Use cases
+  sl.registerLazySingleton(() => ProcessAudioStreamUseCase(sl()));
 }

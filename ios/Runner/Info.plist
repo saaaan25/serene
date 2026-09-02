@@ -10,6 +10,10 @@
 	<string>Serene</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Se requiere acceso al micrófono para el monitoreo continuo y detección en tiempo real.</string>
+	
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
