@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'features/evidence_vault/data/models/evidence_record_model.dart';
+import 'core/constants/hive_constants.dart';
+import 'app/service_locator.dart' as di;
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+
+  Hive.registerAdapter(EvidenceRecordModelAdapter());
+  await Hive.openBox<EvidenceRecordModel>(HiveConstants.encryptedEvidenceBox);
+
+  await di.initServiceLocator();
+
   runApp(const MyApp());
 }
 
@@ -11,7 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Serene',
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -30,7 +42,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Home Page'),
     );
   }
 }
