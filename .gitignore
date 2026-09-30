@@ -48,3 +48,4 @@ app.*.map.json
 .vscode/
 
 /assets/models/*
+!assets/models/model.tflite
