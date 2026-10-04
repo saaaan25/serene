@@ -14,10 +14,16 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Limpiar y reinstalar CocoaPods sin SelectTfOps
+      - name: Limpieza profunda y regeneración nativa
         script: |
           cd ios
+          # Eliminar por completo referencias anteriores y cachés
           rm -rf Pods Podfile.lock .symlinks
+          rm -rf ~/Library/Caches/CocoaPods
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          # Desintegrar cualquier residuo de pods pasados en el proyecto Xcode
+          pod deintegrate || true
+          # Reinstalar limpiamente leyendo el Podfile actual
           pod install --repo-update
           cd ..
       - name: Compilar iOS Release
