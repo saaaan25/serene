@@ -8,20 +8,26 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Instalar dependencias
+      - name: Desactivar Swift Package Manager en Flutter
+        script: |
+          flutter config --no-enable-swift-package-manager
+      - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Generar Pods
+      - name: Limpiar y regenerar Pods
         script: |
-          find . -name "Podfile" -execdir pod repo update \;
-          find . -name "Podfile" -execdir pod install \;
+          cd ios
+          rm -rf Pods Podfile.lock .symlinks
+          pod repo update
+          pod install --repo-update
+          cd ..
       - name: Compilar iOS Release
         script: |
           flutter build ios --release --no-codesign
       - name: Empaquetar a IPA
         script: |
           cd build/ios/iphoneos
-          mkdir Payload
+          mkdir -p Payload
           cp -r Runner.app Payload
           zip -r serene-unsigned.ipa Payload
     artifacts:
