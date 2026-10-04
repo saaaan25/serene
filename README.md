@@ -21,9 +21,10 @@ For iOS builds, run `pod install` from the `ios` directory on macOS after
 
 The bundled audio model uses a TensorFlow Select op (`FlexErf`). Android
 includes the Select TF Ops runtime and creates its delegate before inference.
-iOS pins the Select TF Ops framework to a build compatible with the
-`TensorFlowLiteSwift 2.12.0` runtime used by `tflite_flutter 0.12.1`; do not
-replace it with the latest nightly without upgrading both runtimes together.
+iOS pins `TensorFlowLiteSelectTfOps` to the stable `2.12.0` release, matching
+the `TensorFlowLiteSwift 2.12.0` runtime used by `tflite_flutter 0.12.1`. Keep
+these versions aligned; do not replace either with a newer release or nightly
+independently.
 The prebuilt iOS framework supports physical arm64 devices, not the iOS
 simulator; simulator builds need a Select TF Ops framework built for the
 simulator architecture.

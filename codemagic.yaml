@@ -14,11 +14,9 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Limpiar dependencias nativas de iOS
+      - name: Resolver dependencias nativas de iOS
         script: |
           cd ios
-          rm -rf Pods Podfile.lock .symlinks ~/Library/Caches/CocoaPods
-          pod repo update
           pod install --repo-update
           cd ..
       - name: Compilar iOS Release
