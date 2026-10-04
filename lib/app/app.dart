@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../app/controllers/app_settings_controller.dart';
+import '../core/services/session_manager.dart';
 import 'routes.dart';
 
 /// Root application widget
 /// Configures Material theme with dynamic dark/light mode, router, and providers
 class SereneApp extends StatelessWidget {
-  const SereneApp({super.key});
+  const SereneApp({super.key, this.router, this.sessionManager});
+
+  final GoRouter? router;
+  final SessionManager? sessionManager;
+
+  static final SessionManager _defaultSessionManager = SessionManager();
+  static final GoRouter _defaultRouter = createRouter(_defaultSessionManager);
 
   static ThemeData _buildTheme(bool isDarkMode) {
     if (isDarkMode) {
@@ -241,16 +249,109 @@ class SereneApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppSettingsController>(
-      builder: (context, settingsController, _) {
-        return MaterialApp.router(
-          title: 'serene',
-          theme: _buildTheme(settingsController.isDarkMode),
-          routerConfig: goRouter,
-          debugShowCheckedModeBanner: false,
-        );
-      },
+    final activeSessionManager = sessionManager ?? _defaultSessionManager;
+
+    return ChangeNotifierProvider<SessionManager>.value(
+      value: activeSessionManager,
+      child: Consumer<AppSettingsController>(
+        builder: (context, settingsController, _) {
+          return MaterialApp.router(
+            title: 'serene',
+            theme: _buildTheme(settingsController.isDarkMode),
+            routerConfig: router ?? _defaultRouter,
+            builder: (context, child) {
+              return _AppPrivacyGuard(
+                sessionManager: activeSessionManager,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) {
+                    activeSessionManager.recordUserActivity();
+                  },
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              );
+            },
+            debugShowCheckedModeBanner: false,
+          );
+        },
+      ),
     );
   }
 }
 
+class _AppPrivacyGuard extends StatefulWidget {
+  const _AppPrivacyGuard({required this.sessionManager, required this.child});
+
+  final SessionManager sessionManager;
+  final Widget child;
+
+  @override
+  State<_AppPrivacyGuard> createState() => _AppPrivacyGuardState();
+}
+
+class _AppPrivacyGuardState extends State<_AppPrivacyGuard>
+    with WidgetsBindingObserver {
+  bool _isObscured = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_isObscured && mounted) {
+        setState(() => _isObscured = false);
+      }
+      return;
+    }
+
+    if (!_isObscured && mounted) {
+      setState(() => _isObscured = true);
+    }
+
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      widget.sessionManager.logout();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isObscured) return widget.child;
+
+    final theme = Theme.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        ColoredBox(
+          color: theme.scaffoldBackgroundColor,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.shield, color: theme.colorScheme.primary, size: 32),
+                const SizedBox(width: 12),
+                Text(
+                  'serene',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

@@ -14,6 +14,14 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Se requiere acceso al micrófono para el monitoreo continuo y detección en tiempo real.</string>
 	
+	<key>NSFaceIDUsageDescription</key>
+	<string>serene requiere autenticación biométrica para desbloquear el baúl de evidencias cifradas.</string>
+
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>

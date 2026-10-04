@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../entities/evidence_record.dart';
+import '../entities/vault_stats.dart';
 
 abstract class EvidenceRepository {
   Future<void> saveEncryptedEvidence({
@@ -14,4 +15,7 @@ abstract class EvidenceRepository {
   Future<Uint8List> getDecryptedAudioBytes(EvidenceRecord record);
 
   Future<void> deleteEvidenceRecord(String id);
+
+  /// Obtiene las métricas de cantidad de registros y bytes reales cifrados
+  Future<VaultStats> getVaultStats();
 }

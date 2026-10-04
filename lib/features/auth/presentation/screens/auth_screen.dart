@@ -4,6 +4,8 @@ import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
+import '../../../../core/localization/app_translations.dart';
+import '../../../../core/services/session_manager.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -14,8 +16,9 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final LocalAuthentication _localAuth = LocalAuthentication();
+
   bool _isAuthenticating = false;
-  String? _errorMessage;
+  String? _errorMessageKey;
 
   @override
   void initState() {
@@ -30,17 +33,21 @@ class _AuthScreenState extends State<AuthScreen> {
 
     setState(() {
       _isAuthenticating = true;
-      _errorMessage = null;
+      _errorMessageKey = null;
     });
 
-    try {
-      bool isDeviceSupported = await _localAuth.canCheckBiometrics;
+    final settingsController = context.read<AppSettingsController>();
+    final currentLocale = settingsController.locale;
 
-      if (!isDeviceSupported) {
+    try {
+      final isSupported =
+          await _localAuth.canCheckBiometrics ||
+          await _localAuth.isDeviceSupported();
+
+      if (!isSupported) {
         if (mounted) {
           setState(() {
-            _errorMessage =
-                'Biometría no disponible.\nIntenta de nuevo o contacta soporte.';
+            _errorMessageKey = 'auth_not_supported';
             _isAuthenticating = false;
           });
         }
@@ -48,7 +55,7 @@ class _AuthScreenState extends State<AuthScreen> {
       }
 
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Acceder a serene',
+        localizedReason: AppTranslations.tr('auth_reason', currentLocale),
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,
@@ -56,81 +63,26 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
       if (authenticated && mounted) {
-        context.go('/home');
+        _onAuthSuccess();
       } else if (mounted) {
         setState(() {
-          _errorMessage = 'Autenticación cancelada. Intenta de nuevo.';
+          _errorMessageKey = 'auth_cancelled';
           _isAuthenticating = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Error: ${e.toString().substring(0, 50)}...';
+          _errorMessageKey = 'auth_cancelled';
           _isAuthenticating = false;
         });
       }
     }
   }
 
-  void _showThemeSettings() {
-    final settingsController = context.read<AppSettingsController>();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Preferencias'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Modo Oscuro'),
-                Switch(
-                  value: settingsController.isDarkMode,
-                  onChanged: (value) {
-                    settingsController.setDarkMode(value);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16.0),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Idioma'),
-                DropdownButton<String>(
-                  value: settingsController.locale,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'es',
-                      child: Text('Español'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'en',
-                      child: Text('English'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      settingsController.setLocale(value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
+  void _onAuthSuccess() {
+    context.read<SessionManager>().markAuthenticated();
+    context.go('/home');
   }
 
   @override
@@ -139,215 +91,101 @@ class _AuthScreenState extends State<AuthScreen> {
     final onSurfaceColor = Theme.of(context).colorScheme.onSurface;
     final surfaceColor = Theme.of(context).colorScheme.surface;
 
+    final settingsController = context.watch<AppSettingsController>();
+    final currentLocale = settingsController.locale;
+    String t(String key) => AppTranslations.tr(key, currentLocale);
+
     return Scaffold(
       backgroundColor: surfaceColor,
       body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              child: Column(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0, vertical: 32.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.shield,
-                              color: primaryColor,
-                              size: 28,
+                  Row(
+                    children: [
+                      Icon(Icons.shield, color: primaryColor, size: 28),
+                      const SizedBox(width: 12),
+                      Text(
+                        'serene',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: onSurfaceColor,
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'serene',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: onSurfaceColor,
-                                  ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          onPressed: _showThemeSettings,
-                          icon: Icon(
-                            Icons.settings,
-                            color: primaryColor,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor:
-                                primaryColor.withValues(alpha: 0.15),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Main content
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.6,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Biometric icon
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 160,
-                              height: 160,
-                              decoration: BoxDecoration(
-                                color: primaryColor.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(80),
-                              ),
-                            ),
-                            Icon(
-                              Icons.fingerprint,
-                              size: 100,
-                              color: primaryColor,
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 48.0),
-
-                        // Welcome message
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                          child: Column(
-                            children: [
-                              Text(
-                                'Bienvenido de vuelta',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .displaySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: onSurfaceColor,
-                                    ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12.0),
-                              Text(
-                                'Re-enter the circle of protection.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: onSurfaceColor.withValues(
-                                          alpha: 0.7),
-                                    ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Error message
-                  if (_errorMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .errorContainer
-                              .withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12.0),
-                          border: Border.all(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .error
-                                .withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          _errorMessage!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
                       ),
-                    ),
-
-                  if (_errorMessage != null)
-                    const SizedBox(height: 24.0),
-
-                  // Authenticate button
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: FilledButton(
-                        onPressed: _isAuthenticating
-                            ? null
-                            : _attemptBiometricAuth,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          disabledBackgroundColor:
-                              primaryColor.withValues(alpha: 0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28.0),
-                          ),
-                        ),
-                        child: _isAuthenticating
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : Text(
-                                'AUTENTICAR',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48.0),
-
-                  // Footer
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 24.0),
-                    child: Text(
-                      '© 2026 serene\nALL RIGHTS RESERVED.',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: onSurfaceColor.withValues(alpha: 0.5),
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 40),
+              GestureDetector(
+                onTap: _attemptBiometricAuth,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(70),
+                      ),
+                    ),
+                    Icon(Icons.fingerprint, size: 90, color: primaryColor),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32.0),
+              Text(
+                t('auth_welcome_title'),
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: onSurfaceColor,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8.0),
+              Text(
+                t('auth_welcome_subtitle'),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: onSurfaceColor.withValues(alpha: 0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32.0),
+
+              if (_errorMessageKey != null)
+                Text(
+                  t(_errorMessageKey!),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+              const SizedBox(height: 24.0),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: FilledButton(
+                  onPressed: _isAuthenticating ? null : _attemptBiometricAuth,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28.0),
+                    ),
+                  ),
+                  child: _isAuthenticating
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(t('auth_button')),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

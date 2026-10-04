@@ -6,6 +6,7 @@ import '../../../../core/crypto/cipher_manager.dart';
 import '../../../../core/crypto/secure_key_storage.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/evidence_record.dart';
+import '../../domain/entities/vault_stats.dart';
 import '../../domain/repositories/evidence_repository.dart';
 import '../datasources/evidence_local_datasource.dart';
 import '../models/evidence_record_model.dart';
@@ -30,20 +31,16 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
     required double confidenceScore,
     required Map<String, double> gpsCoordinates,
   }) async {
-    // Get or create the master key for AES-256 GCM encryption
     final secretKey = await keyStorage.getOrCreateMasterKey();
 
-    // Encrypt the raw audio bytes in memory using AES-256 GCM
     final encryptedPayload = await cipherManager.encryptInMemory(
       rawAudioBytes: rawAudioBytes,
       secretKey: secretKey,
     );
 
-    // Generate a SHA-256 hash of the encrypted audio blob for integrity verification
     final digest = crypto_hash.sha256.convert(encryptedPayload.cipherBytes);
     final integrityHash = digest.toString();
 
-    // Create an EvidenceRecordModel instance with the encrypted data and metadata
     final recordModel = EvidenceRecordModel(
       id: _uuid.v4(),
       timestamp: DateTime.now().toUtc(),
@@ -68,15 +65,15 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
 
   @override
   Future<Uint8List> getDecryptedAudioBytes(EvidenceRecord record) async {
-    // Validate the integrity of the encrypted audio blob using SHA-256 hash comparison
-    final currentDigest = crypto_hash.sha256.convert(record.encryptedAudioBlob).toString();
+    final currentDigest =
+        crypto_hash.sha256.convert(record.encryptedAudioBlob).toString();
     if (currentDigest != record.integrityHash) {
-      throw const CryptoFailure('The integrity of the encrypted audio blob has been compromised');
+      throw const CryptoFailure(
+          'The integrity of the encrypted audio blob has been compromised');
     }
 
     final secretKey = await keyStorage.getOrCreateMasterKey();
-    
-    // Decrypt the encrypted audio blob directly into RAM
+
     return await cipherManager.decryptInMemory(
       cipherBytes: record.encryptedAudioBlob,
       ivBytes: record.ivBytes,
@@ -88,5 +85,21 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
   @override
   Future<void> deleteEvidenceRecord(String id) async {
     await localDataSource.removeRecord(id);
+  }
+
+  @override
+  Future<VaultStats> getVaultStats() async {
+    final models = await localDataSource.fetchAllRecords();
+    int totalBytes = 0;
+
+    for (final model in models) {
+      // Suma el peso del blob cifrado persistido en Hive
+      totalBytes += model.encryptedAudioBlob.length;
+    }
+
+    return VaultStats(
+      totalCount: models.length,
+      totalBytes: totalBytes,
+    );
   }
 }

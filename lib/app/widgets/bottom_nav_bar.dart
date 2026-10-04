@@ -8,16 +8,9 @@ import '../../../../core/localization/app_translations.dart';
 class BottomNavBar extends StatelessWidget {
   final int selectedIndex;
 
-  const BottomNavBar({
-    super.key,
-    required this.selectedIndex,
-  });
+  const BottomNavBar({super.key, required this.selectedIndex});
 
-  static const List<String> _destinations = [
-    '/home',
-    '/vault',
-    '/settings',
-  ];
+  static const List<String> _destinations = ['/home', '/vault', '/settings'];
 
   void _onNavItemTapped(BuildContext context, int index) {
     if (index >= 0 && index < _destinations.length && index != selectedIndex) {
@@ -40,14 +33,16 @@ class BottomNavBar extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1f2b49) : Colors.white,
+          color: isDarkMode
+              ? const Color(0xFF1f2b49)
+              : Colors.white, // Fondo del BottomNavBar
           borderRadius: BorderRadius.circular(25.0),
-          border: Border.all(
-            color: primaryColor.withValues(alpha: 0.1),
-          ),
+          border: Border.all(color: primaryColor.withValues(alpha: 0.1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.12),
               blurRadius: 16,
               offset: const Offset(0, 4),
             ),
@@ -116,7 +111,7 @@ class _NavItem extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          padding: const EdgeInsets.symmetric(vertical: 6.0),
           decoration: BoxDecoration(
             color: isSelected
                 ? primaryColor.withValues(alpha: 0.15)
@@ -140,13 +135,13 @@ class _NavItem extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: isSelected
-                          ? primaryColor
-                          : onSurfaceColor.withValues(alpha: 0.5),
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                      fontSize: 10.5,
-                      letterSpacing: 0.5,
-                    ),
+                  color: isSelected
+                      ? primaryColor
+                      : onSurfaceColor.withValues(alpha: 0.5),
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 10.5,
+                  letterSpacing: 0.5,
+                ),
               ),
             ],
           ),

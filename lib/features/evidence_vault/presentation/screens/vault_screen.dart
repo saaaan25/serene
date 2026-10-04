@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../app/dialogs/confirm_delete_dialog.dart';
+import '../../../../app/widgets/serene_app_bar.dart';
+import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/localization/app_translations.dart';
+import '../../domain/repositories/evidence_repository.dart';
+import '../../data/models/evidence_record_model.dart';
 import '../../domain/entities/vault_item.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -13,279 +19,232 @@ class VaultScreen extends StatefulWidget {
 }
 
 class _VaultScreenState extends State<VaultScreen> {
-  // Mock data for the vault items
-  final List<VaultItem> _vaultItems = [
-    VaultItem(
-      id: '1',
-      name: 'Evening_Briefing_0...',
-      date: DateTime(2026, 9, 14, 12, 45),
-      encrypted: true,
-      type: 'audio',
-    ),
-    VaultItem(
-      id: '2',
-      name: 'Security_Log_Hom...',
-      date: DateTime(2026, 9, 13, 5, 12),
-      encrypted: true,
-      type: 'video',
-    ),
-    VaultItem(
-      id: '3',
-      name: 'Legal_Meeting_Tra...',
-      date: DateTime(2026, 9, 11, 16, 10),
-      encrypted: true,
-      type: 'audio',
-    ),
-    VaultItem(
-      id: '4',
-      name: 'Street_Observation...',
-      date: DateTime(2026, 9, 10, 2, 30),
-      encrypted: true,
-      type: 'video',
-    ),
-  ];
+  Box<EvidenceRecordModel>? _evidenceBox;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _openBox();
+  }
+
+  Future<void> _openBox() async {
+    try {
+      if (Hive.isBoxOpen(HiveConstants.encryptedEvidenceBox)) {
+        _evidenceBox = Hive.box<EvidenceRecordModel>(
+          HiveConstants.encryptedEvidenceBox,
+        );
+      } else {
+        _evidenceBox = await Hive.openBox<EvidenceRecordModel>(
+          HiveConstants.encryptedEvidenceBox,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  List<VaultItem> _getRealVaultItems() {
+    if (_evidenceBox == null) return [];
+
+    // Obtiene los modelos de Hive y los mapea a VaultItem ordenados cronológicamente
+    final records = _evidenceBox!.values.toList();
+    records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    return records.map((record) {
+      return VaultItem(
+        id: record.id,
+        name: '${record.predictionLabel}_${record.id.substring(0, 6)}',
+        date: record.timestamp.toLocal(),
+        encrypted: true,
+        type: 'audio',
+      );
+    }).toList();
+  }
+
+  Future<void> _deleteRecord(String id) async {
+    await context.read<EvidenceRepository>().deleteEvidenceRecord(id);
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final tertiaryColor = Theme.of(context).colorScheme.tertiary;
 
-    // Get the current locale from the AppSettingsController
     final settingsController = context.watch<AppSettingsController>();
     final currentLocale = settingsController.locale;
     String t(String key) => AppTranslations.tr(key, currentLocale);
 
+    final vaultItems = _getRealVaultItems();
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        title: Row(
-          children: [
-            //Icon(Icons.shield, color: primaryColor, size: 24),
-            const SizedBox(width: 12),
-            Text(
-              'serene',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: primaryColor,
-                  ),
-            ),
-          ],
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
-            ),
-            child: const CircleAvatar(
-              child: Icon(Icons.person),
-            ),
-          ),
-        ],
-      ),
+      appBar: const SereneAppBar(),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title
-                Text(
-                  t('vault_title'),
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t('vault_title'),
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: primaryColor,
                       ),
-                ),
-
-                const SizedBox(height: 8),
-
-                Text(
-                  t('vault_subtitle'),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.7),
-                      ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // State Badge
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainer,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.1),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    const SizedBox(height: 8),
+                    Text(
+                      t('vault_subtitle'),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Tarjeta de estado
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: primaryColor.withValues(alpha: 0.15),
-                            ),
-                            child: Icon(
-                              Icons.verified,
-                              color: primaryColor,
-                              size: 20,
-                            ),
+                          Row(
+                            children: [
+                              const SizedBox(width: 12),
+                              Text(
+                                t('vault_private_access_badge'),
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(height: 16),
                           Text(
-                            t('vault_status_badge'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
+                            t('vault_private_access_title'),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            t('vault_private_access_desc'),
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.7),
+                                  height: 1.6,
                                 ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        t('vault_encryption_active'),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        t('vault_encryption_desc'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.7),
-                              height: 1.6,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Import button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: FilledButton(
-                    onPressed: () {},
-                    style: FilledButton.styleFrom(
-                      backgroundColor: tertiaryColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.upload, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(
-                          t('vault_import_btn'),
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelLarge
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
 
-                const SizedBox(height: 32),
-
-                // Recent Assets Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+                    const SizedBox(height: 32),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: tertiaryColor,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         Text(
                           t('vault_recent_assets'),
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${vaultItems.length} items',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: primaryColor),
                         ),
                       ],
                     ),
-                    TextButton(
-                      onPressed: () {},
-                      child: Text(
-                        t('vault_sort_by_date'),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: primaryColor,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    const SizedBox(height: 16),
+
+                    if (vaultItems.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40.0),
+                        child: Center(
+                          child: Text(
+                            t('vault_empty_message'),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.5),
+                                ),
+                          ),
+                        ),
+                      )
+                    else
+                      ...vaultItems.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _VaultItemCard(
+                            item: item,
+                            deleteActionText: t('vault_delete_action'),
+                            onDelete: () {
+                              showGeneralDialog<void>(
+                                context: context,
+                                barrierDismissible: true,
+                                barrierLabel: t('vault_cancel_action'),
+                                barrierColor: Colors.transparent,
+                                pageBuilder: (dialogContext, _, _) =>
+                                    ConfirmDeleteDialog(
+                                      title: t('vault_delete_title'),
+                                      message:
+                                          '${t('vault_delete_msg')}\n\n${item.name}',
+                                      confirmLabel: t('vault_confirm_action'),
+                                      cancelLabel: t('vault_cancel_action'),
+                                      onConfirm: () async {
+                                        try {
+                                          await _deleteRecord(item.id);
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                t('vault_delete_success'),
+                                              ),
+                                            ),
+                                          );
+                                        } catch (_) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                t('vault_delete_error'),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
+                    const SizedBox(height: 100),
                   ],
                 ),
-
-                const SizedBox(height: 16),
-
-                // Lista de elementos en el baúl
-                ..._vaultItems.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _VaultItemCard(
-                        item: item,
-                        deleteActionText: t('vault_delete_action'),
-                        onDelete: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => ConfirmDeleteDialog(
-                              title: t('vault_delete_title'),
-                              message: t('vault_delete_msg'),
-                              onConfirm: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(t('vault_delete_success')),
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    )),
-
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -312,9 +271,7 @@ class _VaultItemCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: primaryColor.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
@@ -325,10 +282,7 @@ class _VaultItemCard extends StatelessWidget {
               shape: BoxShape.circle,
               color: primaryColor.withValues(alpha: 0.15),
             ),
-            child: Icon(
-              item.type == 'audio' ? Icons.mic : Icons.videocam,
-              color: primaryColor,
-            ),
+            child: Icon(Icons.mic, color: primaryColor),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -338,18 +292,17 @@ class _VaultItemCard extends StatelessWidget {
                 Text(
                   item.name,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${_formatDate(item.date)} • ${_formatTime(item.date)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.6),
-                      ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ],
             ),
@@ -357,10 +310,7 @@ class _VaultItemCard extends StatelessWidget {
           Icon(Icons.lock, color: tertiaryColor, size: 20),
           PopupMenuButton(
             itemBuilder: (context) => [
-              PopupMenuItem(
-                onTap: onDelete,
-                child: Text(deleteActionText),
-              ),
+              PopupMenuItem(onTap: onDelete, child: Text(deleteActionText)),
             ],
             child: Icon(
               Icons.more_vert,
