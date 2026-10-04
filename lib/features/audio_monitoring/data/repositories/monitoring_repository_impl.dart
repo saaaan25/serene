@@ -1,71 +1,82 @@
 import 'dart:async';
 import 'dart:typed_data';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/dsp/audio_buffer_manager.dart';
 import '../../../../core/dsp/signal_normalizer.dart';
 import '../../domain/entities/audio_window.dart';
-import '../../domain/entities/inference_result.dart';
 import '../../domain/repositories/monitoring_repository.dart';
 import '../datasources/audio_stream_datasource.dart';
-import '../datasources/tflite_inference_engine.dart';
 
 class MonitoringRepositoryImpl implements MonitoringRepository {
   final AudioStreamDataSource audioStreamDataSource;
-  final TfliteInferenceEngine inferenceEngine;
   final AudioBufferManager _bufferManager;
 
   StreamController<AudioWindow>? _windowStreamController;
   StreamSubscription<Uint8List>? _micSubscription;
   final List<int> _rawPcmAccumulator = [];
+  int _samplesSinceLastWindow = 0;
 
   MonitoringRepositoryImpl({
     required this.audioStreamDataSource,
-    required this.inferenceEngine,
     AudioBufferManager? bufferManager,
   }) : _bufferManager = bufferManager ?? AudioBufferManager();
 
   @override
-  Future<void> initializeEngine() async {
-    if (!inferenceEngine.isInitialized) {
-      await inferenceEngine.initialize();
-    }
-  }
+  Future<bool> hasMicrophonePermission() =>
+      audioStreamDataSource.hasPermission();
 
   @override
-  Stream<AudioWindow> startMicrophoneStream() {
+  Future<Stream<AudioWindow>> startMicrophoneStream() async {
+    await _micSubscription?.cancel();
+    await _windowStreamController?.close();
+    _micSubscription = null;
+    _bufferManager.purge();
+    _rawPcmAccumulator.clear();
+    _samplesSinceLastWindow = 0;
     _windowStreamController = StreamController<AudioWindow>.broadcast();
 
-    audioStreamDataSource.startStream().then((stream) {
-      _micSubscription = stream.listen((pcmChunk) {
-        _rawPcmAccumulator.addAll(pcmChunk);
+    try {
+      final audioStream = await audioStreamDataSource.startStream();
+      _micSubscription = audioStream.listen(
+        (pcmChunk) {
+          _rawPcmAccumulator.addAll(pcmChunk);
 
-        // Normalization [-1.0, 1.0]
-        final normalizedFloats = SignalNormalizer.pcm16ToNormalizedFloat32(pcmChunk);
+          final normalizedSamples =
+              SignalNormalizer.pcm16ToNormalizedFloat32(pcmChunk);
+          _bufferManager.appendSamples(normalizedSamples);
+          _samplesSinceLastWindow += normalizedSamples.length;
 
-        // Append normalized samples to the buffer manager
-        _bufferManager.appendSamples(normalizedFloats);
+          final maxRawBytes = AppConstants.expectedSampleCount * 2;
+          if (_rawPcmAccumulator.length > maxRawBytes) {
+            _rawPcmAccumulator.removeRange(
+              0,
+              _rawPcmAccumulator.length - maxRawBytes,
+            );
+          }
 
-        // Generate an AudioWindow from the current buffer snapshot
-        final windowFloats = _bufferManager.getOrderedSnapshot();
+          if (_bufferManager.isFull &&
+              _samplesSinceLastWindow >= AppConstants.sampleRate) {
+            _samplesSinceLastWindow = 0;
+            _windowStreamController?.add(
+              AudioWindow(
+                normalizedSamples: _bufferManager.getOrderedSnapshot(),
+                rawPcmBytes: Uint8List.fromList(_rawPcmAccumulator),
+                timestamp: DateTime.now(),
+              ),
+            );
+          }
 
-        _windowStreamController?.add(
-          AudioWindow(
-            normalizedSamples: windowFloats,
-            rawPcmBytes: Uint8List.fromList(_rawPcmAccumulator),
-            timestamp: DateTime.now(),
-          ),
-        );
-
-        // Cleanup of raw PCM buffer (maximum 5 seconds = 160,000 bytes)
-        const maxRawBytes = 160000;
-        if (_rawPcmAccumulator.length > maxRawBytes) {
-          _rawPcmAccumulator.removeRange(0, _rawPcmAccumulator.length - maxRawBytes);
-        }
-      }, onError: (error) {
-        _windowStreamController?.addError(error);
-      });
-    }).catchError((error) {
-      _windowStreamController?.addError(error);
-    });
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          _windowStreamController?.addError(error, stackTrace);
+        },
+        onDone: () => _windowStreamController?.close(),
+      );
+    } catch (_) {
+      await _windowStreamController?.close();
+      _windowStreamController = null;
+      rethrow;
+    }
 
     return _windowStreamController!.stream;
   }
@@ -77,17 +88,8 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
     await audioStreamDataSource.stopStream();
     _bufferManager.purge();
     _rawPcmAccumulator.clear();
+    _samplesSinceLastWindow = 0;
     await _windowStreamController?.close();
     _windowStreamController = null;
-  }
-
-  @override
-  Future<InferenceResult> runInference(Float32List audioWindow) async {
-    return inferenceEngine.predict(audioWindow);
-  }
-
-  @override
-  void disposeEngine() {
-    inferenceEngine.close();
   }
 }

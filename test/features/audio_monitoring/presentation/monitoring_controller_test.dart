@@ -56,20 +56,16 @@ void main() {
       expect(controller.isMonitoring, isFalse);
     });
 
-    test('startMonitoring should initialize or process the startup of passive monitoring', () async {
-      when(() => mockProcessUseCase.getAudioStream())
-          .thenAnswer((_) => const Stream.empty());
-      when(() => mockProcessUseCase.stop())
-          .thenAnswer((_) async => Future.value());
+    test('startMonitoring reports a denied microphone permission', () async {
+      when(() => mockProcessUseCase.hasMicrophonePermission())
+          .thenAnswer((_) async => false);
 
       await controller.startMonitoring();
 
-      // Si hay RootIsolateToken disponible pasa a active, si falla el hardware pasa a error
-      expect(
-        controller.status == MonitoringStatus.active ||
-        controller.status == MonitoringStatus.error,
-        isTrue,
-      );
+      expect(controller.status, equals(MonitoringStatus.error));
+      expect(controller.isMonitoring, isFalse);
+      expect(controller.errorMessage, contains('Microphone permission'));
+      verify(() => mockProcessUseCase.hasMicrophonePermission()).called(1);
     });
   });
 

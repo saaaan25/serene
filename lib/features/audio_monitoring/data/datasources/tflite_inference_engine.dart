@@ -1,7 +1,12 @@
+import 'dart:ffi';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+// tflite_flutter does not publicly export the native delegate pointer type.
+// ignore: implementation_imports
+import 'package:tflite_flutter/src/bindings/tensorflow_lite_bindings_generated.dart'
+    show TfLiteDelegate;
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/inference_result.dart';
@@ -13,11 +18,15 @@ class TfliteInferenceEngine {
 
   bool get isInitialized => _isInitialized;
 
-  Future<void> initialize() async {
+  Future<void> initialize({
+    Uint8List? modelBytes,
+    String? labelsRaw,
+    int? flexDelegateAddress,
+  }) async {
     try {
-      // Load labels from assets/labels/labels.txt
-      final labelsRaw = await rootBundle.loadString('assets/labels/labels.txt');
-      _labels = labelsRaw
+      final labelText =
+          labelsRaw ?? await rootBundle.loadString('assets/labels/labels.txt');
+      _labels = labelText
           .split('\n')
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
@@ -25,14 +34,42 @@ class TfliteInferenceEngine {
 
       // Configure the TFLite interpreter with 2 threads for better performance
       final options = InterpreterOptions()..threads = 2;
+      if (flexDelegateAddress != null) {
+        options.addDelegate(
+          _FlexDelegatePointer(
+            Pointer<TfLiteDelegate>.fromAddress(flexDelegateAddress),
+          ),
+        );
+      }
 
-      _interpreter = await Interpreter.fromAsset(
-        'assets/models/model.tflite',
-        options: options,
-      );
+      _interpreter = modelBytes == null
+          ? await Interpreter.fromAsset(
+              'assets/models/model.tflite',
+              options: options,
+            )
+          : Interpreter.fromBuffer(modelBytes, options: options);
+
+      final inputShape = _interpreter!.getInputTensor(0).shape;
+      final outputShape = _interpreter!.getOutputTensor(0).shape;
+      if (inputShape.length != 2 ||
+          inputShape.first != 1 ||
+          inputShape.last != AppConstants.expectedSampleCount) {
+        throw AudioProcessingFailure(
+          'Unexpected model input shape: $inputShape',
+        );
+      }
+      if (_labels.isEmpty ||
+          outputShape.length != 2 ||
+          outputShape.first != 1 ||
+          outputShape.last != _labels.length) {
+        throw AudioProcessingFailure(
+          'Model output shape $outputShape does not match ${_labels.length} labels',
+        );
+      }
 
       _isInitialized = true;
     } catch (e) {
+      close();
       throw AudioProcessingFailure('Error: $e');
     }
   }
@@ -41,13 +78,22 @@ class TfliteInferenceEngine {
     if (!_isInitialized || _interpreter == null) {
       throw const AudioProcessingFailure('TFLite engine not initialized');
     }
+    if (normalizedSamples.length != AppConstants.expectedSampleCount) {
+      throw AudioProcessingFailure(
+        'Expected ${AppConstants.expectedSampleCount} audio samples, '
+        'received ${normalizedSamples.length}',
+      );
+    }
 
     try {
       // Input tensor: shape [1, 80000] for a single audio window
       final input = [normalizedSamples];
 
       // Output tensor: shape [1, number_of_labels], initialized to zeros
-      final output = List<double>.filled(_labels.length, 0.0).reshape([1, _labels.length]);
+      final output = List<double>.filled(
+        _labels.length,
+        0.0,
+      ).reshape([1, _labels.length]);
 
       _interpreter!.run(input, output);
 
@@ -73,7 +119,8 @@ class TfliteInferenceEngine {
       }
 
       // Violence detection logic: check if the max score exceeds the threshold and is not 'no_violence'
-      final isViolence = (maxScore >= AppConstants.classificationThreshold) &&
+      final isViolence =
+          (maxScore >= AppConstants.classificationThreshold) &&
           (predictedLabel != AppConstants.classNoViolence);
 
       return InferenceResult(
@@ -88,6 +135,9 @@ class TfliteInferenceEngine {
   }
 
   List<double> _applySoftmax(List<double> logits) {
+    if (logits.isEmpty) {
+      throw const AudioProcessingFailure('Model returned no output scores');
+    }
     final maxLogit = logits.reduce(max);
     final expValues = logits.map((val) => exp(val - maxLogit)).toList();
     final sumExp = expValues.reduce((a, b) => a + b);
@@ -99,4 +149,16 @@ class TfliteInferenceEngine {
     _interpreter = null;
     _isInitialized = false;
   }
+}
+
+class _FlexDelegatePointer extends Delegate {
+  _FlexDelegatePointer(this._delegate);
+
+  final Pointer<TfLiteDelegate> _delegate;
+
+  @override
+  Pointer<TfLiteDelegate> get base => _delegate;
+
+  @override
+  void delete() {}
 }

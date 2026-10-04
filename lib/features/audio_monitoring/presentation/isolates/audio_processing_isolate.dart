@@ -1,145 +1,216 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
-import '../../domain/entities/audio_window.dart';
+import '../../data/datasources/tflite_inference_engine.dart';
 import '../../domain/entities/inference_result.dart';
-import '../../domain/usecases/process_audio_stream_usecase.dart';
 
-enum IsolateCommand { start, stop, dispose }
+class AudioInferenceIsolate {
+  static const _flexDelegateChannel = MethodChannel(
+    'com.example.serene/tflite_flex',
+  );
 
-class IsolateMessage {
-  final IsolateCommand command;
-  final dynamic payload;
-
-  const IsolateMessage(this.command, [this.payload]);
-}
-
-/// Paquete emitido desde el Isolate hacia el hilo principal ante una detección positiva
-class IncidentDetectionPayload {
-  final AudioWindow window;
-  final InferenceResult result;
-
-  const IncidentDetectionPayload({
-    required this.window,
-    required this.result,
-  });
-}
-
-class AudioProcessingIsolate {
   Isolate? _isolate;
   ReceivePort? _receivePort;
-  SendPort? _isolateSendPort;
-  StreamSubscription? _portSubscription;
+  SendPort? _sendPort;
+  final Completer<void> _ready = Completer<void>();
+  final Completer<void> _disposed = Completer<void>();
+  final Map<int, Completer<InferenceResult>> _pending = {};
+  int? _flexDelegateAddress;
+  int _nextRequestId = 0;
 
-  final void Function(IncidentDetectionPayload payload) onIncidentDetected;
-  final void Function(String error) onError;
-
-  AudioProcessingIsolate({
-    required this.onIncidentDetected,
-    required this.onError,
-  });
-
-  /// Start the isolate and set up communication channels
-  Future<void> spawn({
-    required RootIsolateToken rootToken,
-    required ProcessAudioStreamUseCase processUseCase,
-  }) async {
-    _receivePort = ReceivePort();
-
-    // Spawn the isolate and pass the initialization parameters
-    _isolate = await Isolate.spawn(
-      _isolateEntryPoint,
-      _IsolateInitParams(
-        token: rootToken,
-        sendPort: _receivePort!.sendPort,
-        useCase: processUseCase,
-      ),
+  Future<void> initialize() async {
+    final modelData = await rootBundle.load('assets/models/model.tflite');
+    final modelBytes = modelData.buffer.asUint8List(
+      modelData.offsetInBytes,
+      modelData.lengthInBytes,
     );
-
-    // Listen for incoming events from the Isolate
-    _portSubscription = _receivePort!.listen((message) {
-      if (message is SendPort) {
-        _isolateSendPort = message;
-        // Once the port is connected, send the start command
-        _isolateSendPort?.send(const IsolateMessage(IsolateCommand.start));
-      } else if (message is IncidentDetectionPayload) {
-        onIncidentDetected(message);
-      } else if (message is String) {
-        onError(message);
-      }
-    });
-  }
-
-  /// Static entry function that runs in the isolate
-  static void _isolateEntryPoint(_IsolateInitParams params) {
-    // Initialize the binary messenger so the Isolate can use native plugins
-    BackgroundIsolateBinaryMessenger.ensureInitialized(params.token);
-
-    final isolateReceivePort = ReceivePort();
-    params.sendPort.send(isolateReceivePort.sendPort);
-
-    StreamSubscription<AudioWindow>? audioSubscription;
-
-    isolateReceivePort.listen((message) async {
-      if (message is IsolateMessage) {
-        switch (message.command) {
-          case IsolateCommand.start:
-            audioSubscription = params.useCase.getAudioStream().listen(
-              (window) async {
-                try {
-                  // Execution of the TFLite inference in the background isolate
-                  final result = await params.useCase.execute(window);
-
-                  // If violence is confirmed, notify the main isolate
-                  if (result.isViolenceDetected) {
-                    params.sendPort.send(
-                      IncidentDetectionPayload(window: window, result: result),
-                    );
-                  }
-                } catch (e) {
-                  params.sendPort.send('Inference failure in Isolate: $e');
-                }
-              },
-              onError: (err) => params.sendPort.send('Error: $err'),
-            );
-            break;
-
-          case IsolateCommand.stop:
-            await audioSubscription?.cancel();
-            await params.useCase.stop();
-            break;
-
-          case IsolateCommand.dispose:
-            await audioSubscription?.cancel();
-            await params.useCase.stop();
-            isolateReceivePort.close();
-            break;
+    final labelsRaw = await rootBundle.loadString('assets/labels/labels.txt');
+    try {
+      if (Platform.isAndroid) {
+        _flexDelegateAddress = await _flexDelegateChannel.invokeMethod<int>(
+          'createFlexDelegate',
+        );
+        if (_flexDelegateAddress == null || _flexDelegateAddress == 0) {
+          throw StateError(
+            'Android did not create the TensorFlow Flex delegate',
+          );
         }
       }
-    });
+
+      _receivePort = ReceivePort();
+      _receivePort!.listen(_handleMessage);
+      _isolate = await Isolate.spawn(
+        _inferenceWorkerEntryPoint,
+        _InferenceWorkerParams(
+          mainSendPort: _receivePort!.sendPort,
+          modelBytes: TransferableTypedData.fromList([modelBytes]),
+          labelsRaw: labelsRaw,
+          flexDelegateAddress: _flexDelegateAddress,
+        ),
+      );
+      await _ready.future.timeout(const Duration(seconds: 30));
+    } catch (_) {
+      await dispose();
+      rethrow;
+    }
   }
 
-  Future<void> stop() async {
-    _isolateSendPort?.send(const IsolateMessage(IsolateCommand.stop));
+  Future<InferenceResult> predict(Float32List samples) {
+    final sendPort = _sendPort;
+    if (sendPort == null || !_ready.isCompleted) {
+      throw StateError('Audio inference worker is not initialized');
+    }
+
+    final requestId = _nextRequestId++;
+    final completer = Completer<InferenceResult>();
+    _pending[requestId] = completer;
+    sendPort.send({'type': 'predict', 'id': requestId, 'samples': samples});
+    return completer.future;
   }
 
-  void dispose() {
-    _isolateSendPort?.send(const IsolateMessage(IsolateCommand.dispose));
-    _portSubscription?.cancel();
+  void _handleMessage(Object? message) {
+    if (message is SendPort) {
+      _sendPort = message;
+      return;
+    }
+    if (message is! Map) return;
+
+    switch (message['type']) {
+      case 'ready':
+        if (!_ready.isCompleted) _ready.complete();
+      case 'initializationError':
+        _sendPort = null;
+        if (!_ready.isCompleted) {
+          _ready.completeError(StateError(message['message'] as String));
+        }
+      case 'result':
+        final requestId = message['id'] as int;
+        final completer = _pending.remove(requestId);
+        if (completer == null) return;
+        final scores = (message['scores'] as Map).map(
+          (key, value) => MapEntry(key as String, value as double),
+        );
+        completer.complete(
+          InferenceResult(
+            label: message['label'] as String,
+            confidence: message['confidence'] as double,
+            allScores: scores,
+            isViolenceDetected: message['isViolenceDetected'] as bool,
+          ),
+        );
+      case 'predictionError':
+        final requestId = message['id'] as int;
+        final completer = _pending.remove(requestId);
+        completer?.completeError(StateError(message['message'] as String));
+      case 'disposed':
+        if (!_disposed.isCompleted) _disposed.complete();
+    }
+  }
+
+  Future<void> dispose() async {
+    final sendPort = _sendPort;
+    if (sendPort != null) {
+      sendPort.send({'type': 'dispose'});
+      try {
+        await _disposed.future.timeout(const Duration(seconds: 3));
+      } on TimeoutException {
+        _isolate?.kill(priority: Isolate.immediate);
+      }
+    } else {
+      _isolate?.kill(priority: Isolate.immediate);
+    }
+
+    for (final completer in _pending.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('Audio inference worker stopped'));
+      }
+    }
+    _pending.clear();
     _receivePort?.close();
-    _isolate?.kill(priority: Isolate.immediate);
+    _receivePort = null;
+    _sendPort = null;
     _isolate = null;
+
+    if (_flexDelegateAddress != null) {
+      await _flexDelegateChannel.invokeMethod<void>('disposeFlexDelegate');
+      _flexDelegateAddress = null;
+    }
   }
 }
 
-class _IsolateInitParams {
-  final RootIsolateToken token;
-  final SendPort sendPort;
-  final ProcessAudioStreamUseCase useCase;
+@pragma('vm:entry-point')
+void _inferenceWorkerEntryPoint(_InferenceWorkerParams params) {
+  final receivePort = ReceivePort();
+  params.mainSendPort.send(receivePort.sendPort);
 
-  const _IsolateInitParams({
-    required this.token,
-    required this.sendPort,
-    required this.useCase,
+  final engine = TfliteInferenceEngine();
+  try {
+    engine
+        .initialize(
+          modelBytes: params.modelBytes.materialize().asUint8List(),
+          labelsRaw: params.labelsRaw,
+          flexDelegateAddress: params.flexDelegateAddress,
+        )
+        .then((_) {
+          params.mainSendPort.send({'type': 'ready'});
+          receivePort.listen((message) {
+            if (message is! Map) return;
+            if (message['type'] == 'dispose') {
+              engine.close();
+              params.mainSendPort.send({'type': 'disposed'});
+              receivePort.close();
+              return;
+            }
+            if (message['type'] != 'predict') return;
+
+            final requestId = message['id'] as int;
+            try {
+              final result = engine.predict(message['samples'] as Float32List);
+              params.mainSendPort.send({
+                'type': 'result',
+                'id': requestId,
+                'label': result.label,
+                'confidence': result.confidence,
+                'scores': result.allScores,
+                'isViolenceDetected': result.isViolenceDetected,
+              });
+            } catch (error) {
+              params.mainSendPort.send({
+                'type': 'predictionError',
+                'id': requestId,
+                'message': error.toString(),
+              });
+            }
+          });
+        })
+        .catchError((Object error) {
+          params.mainSendPort.send({
+            'type': 'initializationError',
+            'message': error.toString(),
+          });
+          receivePort.close();
+        });
+  } catch (error) {
+    params.mainSendPort.send({
+      'type': 'initializationError',
+      'message': error.toString(),
+    });
+    receivePort.close();
+  }
+}
+
+class _InferenceWorkerParams {
+  const _InferenceWorkerParams({
+    required this.mainSendPort,
+    required this.modelBytes,
+    required this.labelsRaw,
+    required this.flexDelegateAddress,
   });
+
+  final SendPort mainSendPort;
+  final TransferableTypedData modelBytes;
+  final String labelsRaw;
+  final int? flexDelegateAddress;
 }

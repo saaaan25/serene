@@ -1,5 +1,4 @@
 import '../entities/audio_window.dart';
-import '../entities/inference_result.dart';
 import '../repositories/monitoring_repository.dart';
 
 class ProcessAudioStreamUseCase {
@@ -7,11 +6,11 @@ class ProcessAudioStreamUseCase {
 
   ProcessAudioStreamUseCase(this.repository);
 
-  Future<InferenceResult> execute(AudioWindow window) async {
-    return await repository.runInference(window.normalizedSamples);
+  Future<bool> hasMicrophonePermission() {
+    return repository.hasMicrophonePermission();
   }
 
-  Stream<AudioWindow> getAudioStream() {
+  Future<Stream<AudioWindow>> getAudioStream() {
     return repository.startMicrophoneStream();
   }
 

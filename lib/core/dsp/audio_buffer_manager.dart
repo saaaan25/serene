@@ -7,6 +7,8 @@ class AudioBufferManager {
   int _writeIndex = 0;
   bool _isFull = false;
 
+  bool get isFull => _isFull;
+
   AudioBufferManager({int? bufferSize})
       : capacityInSamples = bufferSize ?? AppConstants.expectedSampleCount,
         _buffer = Float32List(bufferSize ?? AppConstants.expectedSampleCount);

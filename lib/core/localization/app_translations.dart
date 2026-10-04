@@ -46,6 +46,8 @@ class AppTranslations {
       'home_monitoring_active': 'Activo',
       'home_monitoring_paused': 'En pausa',
       'home_monitoring_unavailable': 'No disponible',
+      'home_monitoring_error_hint':
+          'Revisa los permisos de micrófono y notificaciones en Ajustes.',
       'home_latest_event_title': 'ÚLTIMO EVENTO',
       'home_no_events': 'Sin detecciones',
       'home_session_title': 'SESIÓN PROTEGIDA',
@@ -125,6 +127,8 @@ class AppTranslations {
       'home_monitoring_active': 'Active',
       'home_monitoring_paused': 'Paused',
       'home_monitoring_unavailable': 'Unavailable',
+      'home_monitoring_error_hint':
+          'Check microphone and notification permissions in Settings.',
       'home_latest_event_title': 'LATEST EVENT',
       'home_no_events': 'No detections',
       'home_session_title': 'PROTECTED SESSION',

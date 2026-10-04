@@ -13,6 +13,8 @@
 
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Se requiere acceso al micrófono para el monitoreo continuo y detección en tiempo real.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Se requiere acceso a la ubicación para añadirla a una evidencia cuando se detecta un incidente.</string>
 	
 	<key>NSFaceIDUsageDescription</key>
 	<string>serene requiere autenticación biométrica para desbloquear el baúl de evidencias cifradas.</string>

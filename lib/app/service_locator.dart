@@ -1,7 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:hive/hive.dart';
 import 'package:serene/features/audio_monitoring/data/datasources/audio_stream_datasource.dart';
-import 'package:serene/features/audio_monitoring/data/datasources/tflite_inference_engine.dart';
 import 'package:serene/features/audio_monitoring/data/repositories/monitoring_repository_impl.dart';
 import 'package:serene/features/audio_monitoring/domain/repositories/monitoring_repository.dart';
 import 'package:serene/features/audio_monitoring/domain/usecases/process_audio_stream_usecase.dart';
@@ -59,14 +58,12 @@ Future<void> initServiceLocator() async {
 
   // FEATURE: Audio Monitoring
   // Data sources
-  sl.registerLazySingleton<TfliteInferenceEngine>(() => TfliteInferenceEngine());
   sl.registerLazySingleton<AudioStreamDataSource>(() => AudioStreamDataSourceImpl());
 
   // Repositories
   sl.registerLazySingleton<MonitoringRepository>(
     () => MonitoringRepositoryImpl(
       audioStreamDataSource: sl(),
-      inferenceEngine: sl(),
     ),
   );
 

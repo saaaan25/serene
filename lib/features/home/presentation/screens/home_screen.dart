@@ -127,6 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               value: t(statusTextKey),
                               iconColor: statusColor,
                               indicatorColor: statusColor,
+                              subtitle: monitoringController.status ==
+                                      MonitoringStatus.error
+                                  ? t('home_monitoring_error_hint')
+                                  : null,
                             ),
                             _HomeStatusPage(
                               icon: hasDetection
@@ -312,6 +316,7 @@ class _HomeStatusPage extends StatelessWidget {
     required this.value,
     required this.iconColor,
     required this.indicatorColor,
+    this.subtitle,
   });
 
   final IconData icon;
@@ -319,6 +324,7 @@ class _HomeStatusPage extends StatelessWidget {
   final String value;
   final Color iconColor;
   final Color indicatorColor;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -375,6 +381,18 @@ class _HomeStatusPage extends StatelessWidget {
               ),
             ],
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -1,17 +1,26 @@
-# serene
+# Serene
 
-A new Flutter project.
+Serene is a Flutter app for passive audio monitoring and encrypted evidence
+storage.
 
-## Getting Started
+## Mobile setup
 
-This project is a starting point for a Flutter application.
+Run `flutter pub get` before building. Android requests microphone permission
+for monitoring and notification permission so its foreground service can show
+the persistent monitoring notification. Location is requested only when an
+incident is saved; an evidence record has no coordinates if location is
+unavailable or permission is denied. If microphone or notification access is
+denied, enable it in the device's app settings and reopen Serene.
 
-A few resources to get you started if this is your first Flutter project:
+On Android, monitoring uses a microphone foreground service and can continue
+while the app is in the background. On iOS, audio background mode is enabled;
+background execution is subject to iOS audio-session and system policies.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+For iOS builds, run `pod install` from the `ios` directory on macOS after
+`flutter pub get`. iOS builds cannot be produced on Windows.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The bundled audio model uses a TensorFlow Select op (`FlexErf`). Android
+includes the Select TF Ops runtime and creates its delegate before inference;
+iOS links the Select TF Ops framework into the app. The prebuilt iOS framework
+supports physical arm64 devices, not the iOS simulator; simulator builds need a
+Select TF Ops framework built for the simulator architecture.

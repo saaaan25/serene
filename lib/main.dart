@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -31,13 +32,7 @@ void main() async {
   // This will open the appSettings box and create AppSettingsController
   await di.initServiceLocator();
 
-  // Initialize and start passive monitoring in background
-  try {
-    final monitoringController = di.sl<MonitoringController>();
-    await monitoringController.startMonitoring();
-  } catch (e) {
-    debugPrint('Error starting monitoring service: $e');
-  }
+  final monitoringController = di.sl<MonitoringController>();
 
   final sessionManager = SessionManager();
   final router = createRouter(sessionManager);
@@ -53,10 +48,14 @@ void main() async {
         ),
         Provider<EvidenceRepository>.value(value: di.sl<EvidenceRepository>()),
         ChangeNotifierProvider<MonitoringController>.value(
-          value: di.sl<MonitoringController>(),
+          value: monitoringController,
         ),
       ],
       child: SereneApp(router: router, sessionManager: sessionManager),
     ),
   );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(monitoringController.startMonitoring());
+  });
 }

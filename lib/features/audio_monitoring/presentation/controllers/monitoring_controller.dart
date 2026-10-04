@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../../../core/services/monitoring_foreground_service.dart';
 import '../../../evidence_vault/domain/usecases/save_encrypted_evidence_usecase.dart';
+import '../../domain/entities/audio_window.dart';
+import '../../domain/entities/inference_result.dart';
 import '../../domain/usecases/process_audio_stream_usecase.dart';
 import '../isolates/audio_processing_isolate.dart';
 
@@ -10,117 +13,222 @@ enum MonitoringStatus { idle, initializing, active, paused, error }
 class MonitoringController extends ChangeNotifier {
   final ProcessAudioStreamUseCase _processAudioUseCase;
   final SaveEncryptedEvidenceUseCase _saveEvidenceUseCase;
+  final MonitoringForegroundService _foregroundService;
 
-  AudioProcessingIsolate? _audioIsolate;
+  AudioInferenceIsolate? _inferenceIsolate;
+  StreamSubscription<AudioWindow>? _audioSubscription;
   MonitoringStatus _status = MonitoringStatus.idle;
   String? _errorMessage;
   String _lastDetectedClass = 'None';
+  bool _isProcessingWindow = false;
+  bool _microphoneStreamStarted = false;
+  bool _foregroundServiceStarted = false;
 
   MonitoringController({
     required ProcessAudioStreamUseCase processAudioUseCase,
     required SaveEncryptedEvidenceUseCase saveEvidenceUseCase,
-  })  : _processAudioUseCase = processAudioUseCase,
-        _saveEvidenceUseCase = saveEvidenceUseCase;
+    MonitoringForegroundService? foregroundService,
+  }) : _processAudioUseCase = processAudioUseCase,
+       _saveEvidenceUseCase = saveEvidenceUseCase,
+       _foregroundService = foregroundService ?? MonitoringForegroundService();
 
   MonitoringStatus get status => _status;
   String? get errorMessage => _errorMessage;
   String get lastDetectedClass => _lastDetectedClass;
   bool get isMonitoring => _status == MonitoringStatus.active;
 
-  /// Start the passive monitoring service, initializing the isolate and audio stream
   Future<void> startMonitoring() async {
-    if (_status == MonitoringStatus.active) return;
+    if (_status == MonitoringStatus.active ||
+        _status == MonitoringStatus.initializing) {
+      return;
+    }
 
     _status = MonitoringStatus.initializing;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final rootToken = RootIsolateToken.instance;
-      if (rootToken == null) {
-        throw Exception('Could not obtain RootIsolateToken. Ensure this is called from the main isolate');
+      debugPrint('Checking microphone permission for monitoring.');
+      if (!await _processAudioUseCase.hasMicrophonePermission()) {
+        throw StateError('Microphone permission was not granted.');
       }
+      debugPrint('Initializing TensorFlow Lite inference worker.');
 
-      _audioIsolate = AudioProcessingIsolate(
-        onIncidentDetected: _handleIncidentDetected,
-        onError: (err) {
-          _errorMessage = err;
-          _status = MonitoringStatus.error;
-          notifyListeners();
+      _inferenceIsolate = AudioInferenceIsolate();
+      await _inferenceIsolate!.initialize();
+      debugPrint('TensorFlow Lite inference worker is ready.');
+
+      await _foregroundService.start();
+      _foregroundServiceStarted = true;
+      debugPrint('Android foreground monitoring service is running.');
+
+      final audioStream = await _processAudioUseCase.getAudioStream();
+      _microphoneStreamStarted = true;
+      debugPrint('Microphone audio stream is running.');
+      _audioSubscription = audioStream.listen(
+        _processAudioWindow,
+        onError: (Object error, StackTrace stackTrace) {
+          _failMonitoring('Microphone stream failed: $error');
         },
-      );
-
-      await _audioIsolate!.spawn(
-        rootToken: rootToken,
-        processUseCase: _processAudioUseCase,
+        onDone: () {
+          if (_status == MonitoringStatus.active) {
+            _failMonitoring('Microphone stream ended unexpectedly.');
+          }
+        },
       );
 
       _status = MonitoringStatus.active;
       notifyListeners();
-    } catch (e) {
+    } catch (error) {
+      var startupError = error;
+      try {
+        await _stopResources();
+      } catch (cleanupError) {
+        startupError = '$error; resource cleanup also failed: $cleanupError';
+      }
       _status = MonitoringStatus.error;
-      _errorMessage = 'Error al arrancar servicio de monitoreo: $e';
+      _errorMessage = 'No se pudo iniciar el monitoreo: $startupError';
+      debugPrint(_errorMessage);
       notifyListeners();
     }
   }
 
-  /// Stop the passive monitoring service, terminating the isolate and audio stream
   Future<void> pauseMonitoring() async {
     if (_status != MonitoringStatus.active) return;
 
-    await _audioIsolate?.stop();
-    _status = MonitoringStatus.paused;
+    try {
+      await _stopResources();
+      _status = MonitoringStatus.paused;
+      _errorMessage = null;
+    } catch (error) {
+      _status = MonitoringStatus.error;
+      _errorMessage = 'No se pudo detener el monitoreo: $error';
+    }
     notifyListeners();
   }
 
-  /// Manually dispose of the isolate and clean up resources
-  Future<void> _handleIncidentDetected(IncidentDetectionPayload payload) async {
-    _lastDetectedClass = payload.result.label;
+  Future<void> _processAudioWindow(AudioWindow window) async {
+    if (_isProcessingWindow) return;
+    _isProcessingWindow = true;
+    try {
+      final result = await _inferenceIsolate!.predict(window.normalizedSamples);
+      if (_status == MonitoringStatus.active && result.isViolenceDetected) {
+        await _handleIncidentDetected(window, result);
+      }
+    } catch (error) {
+      _failMonitoring('Audio inference failed: $error');
+    } finally {
+      _isProcessingWindow = false;
+    }
+  }
+
+  Future<void> _handleIncidentDetected(
+    AudioWindow window,
+    InferenceResult result,
+  ) async {
+    _lastDetectedClass = result.label;
     notifyListeners();
 
-    // Get current GPS coordinates
     final coordinates = await _captureCurrentCoordinates();
-
-    // Persist the evidence using the SaveEncryptedEvidenceUseCase
     await _saveEvidenceUseCase(
       SaveEncryptedEvidenceParams(
-        rawAudioBytes: payload.window.rawPcmBytes,
-        predictionLabel: payload.result.label,
-        confidenceScore: payload.result.confidence,
+        rawAudioBytes: window.rawPcmBytes,
+        predictionLabel: result.label,
+        confidenceScore: result.confidence,
         gpsCoordinates: coordinates,
       ),
     );
   }
 
-  /// Extract the current GPS coordinates, returning a default of (0.0, 0.0) if unavailable
   Future<Map<String, double>> _captureCurrentCoordinates() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        return {'lat': 0.0, 'lng': 0.0};
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        debugPrint('Location unavailable: device location services are off.');
+        return {};
       }
 
-      LocationPermission permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          return {'lat': 0.0, 'lng': 0.0};
-        }
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        debugPrint('Location unavailable: permission was not granted.');
+        return {};
       }
 
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 10),
       );
-
       return {'lat': position.latitude, 'lng': position.longitude};
-    } catch (_) {
-      return {'lat': 0.0, 'lng': 0.0};
+    } catch (error) {
+      debugPrint('Location could not be captured: $error');
+      return {};
+    }
+  }
+
+  void _failMonitoring(String message) {
+    if (_status == MonitoringStatus.error) return;
+    _status = MonitoringStatus.error;
+    _errorMessage = message;
+    debugPrint(message);
+    notifyListeners();
+    unawaited(
+      _stopResources().catchError((Object error) {
+        debugPrint('Error stopping audio monitoring: $error');
+      }),
+    );
+  }
+
+  Future<void> _stopResources() async {
+    final errors = <Object>[];
+    final subscription = _audioSubscription;
+    _audioSubscription = null;
+    try {
+      await subscription?.cancel();
+    } catch (error) {
+      errors.add(error);
+    }
+
+    if (_microphoneStreamStarted) {
+      _microphoneStreamStarted = false;
+      try {
+        await _processAudioUseCase.stop();
+      } catch (error) {
+        errors.add(error);
+      }
+    }
+
+    final inferenceIsolate = _inferenceIsolate;
+    _inferenceIsolate = null;
+    try {
+      await inferenceIsolate?.dispose();
+    } catch (error) {
+      errors.add(error);
+    }
+
+    if (_foregroundServiceStarted) {
+      _foregroundServiceStarted = false;
+      try {
+        await _foregroundService.stop();
+      } catch (error) {
+        errors.add(error);
+      }
+    }
+
+    if (errors.isNotEmpty) {
+      throw StateError('Resource cleanup failed: ${errors.join('; ')}');
     }
   }
 
   @override
   void dispose() {
-    _audioIsolate?.dispose();
+    unawaited(
+      _stopResources().catchError((Object error) {
+        debugPrint('Error disposing audio monitoring: $error');
+      }),
+    );
     super.dispose();
   }
 }

@@ -38,13 +38,14 @@ dependencies:
   uuid: ^4.5.1
   crypto: ^3.0.6
   get_it: ^7.7.0
-  tflite_flutter: ^0.11.0
+  tflite_flutter: ^0.12.1
   geolocator: ^12.0.0
   go_router: ^14.8.1
   local_auth: ^2.3.0
   just_audio: ^0.9.46
   intl: ^0.20.2
   provider: ^6.1.5
+  flutter_foreground_task: ^10.0.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -76,6 +77,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/models/model.tflite
+    - assets/labels/labels.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:

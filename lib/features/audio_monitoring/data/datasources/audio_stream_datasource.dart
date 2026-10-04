@@ -5,6 +5,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 
 abstract class AudioStreamDataSource {
+  Future<bool> hasPermission();
   Future<Stream<Uint8List>> startStream();
   Future<void> stopStream();
 }
@@ -16,9 +17,11 @@ class AudioStreamDataSourceImpl implements AudioStreamDataSource {
       : _audioRecorder = audioRecorder ?? AudioRecorder();
 
   @override
+  Future<bool> hasPermission() => _audioRecorder.hasPermission();
+
+  @override
   Future<Stream<Uint8List>> startStream() async {
-    final hasPermission = await _audioRecorder.hasPermission();
-    if (!hasPermission) {
+    if (!await hasPermission()) {
       throw const AudioProcessingFailure('Access to microphone denied');
     }
 

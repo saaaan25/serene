@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("com.google.ai.edge.litert:litert-api:1.4.0")
+    implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1")
+}
