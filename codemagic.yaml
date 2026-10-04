@@ -14,10 +14,10 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Limpiar y regenerar Pods
+      - name: Limpiar dependencias nativas de iOS
         script: |
           cd ios
-          rm -rf Pods Podfile.lock .symlinks
+          rm -rf Pods Podfile.lock .symlinks ~/Library/Caches/CocoaPods
           pod repo update
           pod install --repo-update
           cd ..
