@@ -14,6 +14,9 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
+      - name: Alinear versiones nativas de TensorFlow Lite
+        script: |
+          ruby tool/align_tflite_ios_podspec.rb
       - name: Instalar dependencias nativas de iOS
         script: |
           cd ios

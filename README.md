@@ -17,14 +17,17 @@ while the app is in the background. On iOS, audio background mode is enabled;
 background execution is subject to iOS audio-session and system policies.
 
 For iOS builds, run `pod install` from the `ios` directory on macOS after
-`flutter pub get`. iOS builds cannot be produced on Windows.
+`flutter pub get`. Before `pod install`, run
+`ruby tool/align_tflite_ios_podspec.rb` from the repository root to align the
+iOS TensorFlow Lite pod versions. iOS builds cannot be produced on Windows.
 
 The bundled audio model uses a TensorFlow Select op (`FlexErf`). Android
 includes the Select TF Ops runtime and creates its delegate before inference.
-iOS pins `TensorFlowLiteSelectTfOps` to the stable `2.12.0` release, matching
-the `TensorFlowLiteSwift 2.12.0` runtime used by `tflite_flutter 0.12.1`. Keep
-these versions aligned; do not replace either with a newer release or nightly
-independently.
+iOS uses the matching `0.0.1-nightly.20230414` builds of
+`TensorFlowLiteSwift` and `TensorFlowLiteSelectTfOps`. `tflite_flutter 0.12.1`
+pins its iOS runtime to `2.12.0`; the alignment script updates that podspec
+dependency before CocoaPods resolves dependencies. Keep both native runtimes
+on the same version to avoid unresolved TensorFlow/Protobuf symbols at link time.
 The prebuilt iOS framework supports physical arm64 devices, not the iOS
 simulator; simulator builds need a Select TF Ops framework built for the
 simulator architecture.
