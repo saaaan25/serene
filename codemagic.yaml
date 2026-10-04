@@ -14,16 +14,14 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Limpieza profunda y regeneración nativa
+      - name: Purgar referencias residuales de SelectTfOps en project.pbxproj
         script: |
           cd ios
-          # Eliminar por completo referencias anteriores y cachés
-          rm -rf Pods Podfile.lock .symlinks
-          rm -rf ~/Library/Caches/CocoaPods
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-          # Desintegrar cualquier residuo de pods pasados en el proyecto Xcode
+          # Eliminar cualquier línea en project.pbxproj que mencione TensorFlowLiteSelectTfOps
+          sed -i '' '/TensorFlowLiteSelectTfOps/d' Runner.xcodeproj/project.pbxproj
+          # Limpiar cachés y pods previos
+          rm -rf Pods Podfile.lock .symlinks ~/Library/Caches/CocoaPods
           pod deintegrate || true
-          # Reinstalar limpiamente leyendo el Podfile actual
           pod install --repo-update
           cd ..
       - name: Compilar iOS Release
