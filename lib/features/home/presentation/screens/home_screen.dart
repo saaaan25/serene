@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
@@ -67,6 +68,42 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _retryMonitoring() async {
+    try {
+      var permission = await Permission.microphone.status;
+      if (permission.isPermanentlyDenied || permission.isRestricted) {
+        final opened = await openAppSettings();
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppTranslations.tr(
+                  'home_monitoring_settings_error',
+                  context.read<AppSettingsController>().locale,
+                ),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!permission.isGranted) {
+        permission = await Permission.microphone.request();
+      }
+      if (permission.isGranted && mounted) {
+        await context.read<MonitoringController>().startMonitoring();
+      }
+    } catch (error) {
+      debugPrint('Unable to request microphone permission: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -93,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String t(String key) => AppTranslations.tr(key, currentLocale);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.transparent,
       appBar: const SereneAppBar(),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -127,10 +164,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               value: t(statusTextKey),
                               iconColor: statusColor,
                               indicatorColor: statusColor,
-                              subtitle: monitoringController.status ==
-                                      MonitoringStatus.error
-                                  ? t('home_monitoring_error_hint')
-                                  : null,
                             ),
                             _HomeStatusPage(
                               icon: hasDetection
@@ -203,6 +236,57 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+
+                if (monitoringController.status == MonitoringStatus.error) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t('home_monitoring_error_hint'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (monitoringController.errorMessage
+                            case final detail?)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              detail,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _retryMonitoring,
+                            icon: const Icon(Icons.mic),
+                            label: Text(t('home_monitoring_retry')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 40),
 
@@ -316,7 +400,6 @@ class _HomeStatusPage extends StatelessWidget {
     required this.value,
     required this.iconColor,
     required this.indicatorColor,
-    this.subtitle,
   });
 
   final IconData icon;
@@ -324,7 +407,6 @@ class _HomeStatusPage extends StatelessWidget {
   final String value;
   final Color iconColor;
   final Color indicatorColor;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -381,18 +463,6 @@ class _HomeStatusPage extends StatelessWidget {
               ),
             ],
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              subtitle!,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
         ],
       ),
     );

@@ -92,8 +92,8 @@ class MonitoringController extends ChangeNotifier {
         startupError = '$error; resource cleanup also failed: $cleanupError';
       }
       _status = MonitoringStatus.error;
-      _errorMessage = 'No se pudo iniciar el monitoreo: $startupError';
-      debugPrint(_errorMessage);
+      _errorMessage = startupError.toString();
+      debugPrint('Audio monitoring startup failed: $startupError');
       notifyListeners();
     }
   }

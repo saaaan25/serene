@@ -18,7 +18,7 @@ class SettingsScreen extends StatelessWidget {
     String t(String key) => AppTranslations.tr(key, currentLocale);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.transparent,
       appBar: const SereneAppBar(),
       body: SafeArea(
         child: SingleChildScrollView(

@@ -44,10 +44,11 @@ GoRouter createRouter(SessionManager sessionManager) {
         builder: (context, state, navigationShell) {
           return Scaffold(
             extendBody: true,
-            backgroundColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             body: navigationShell,
-            bottomNavigationBar: BottomNavBar(
-              selectedIndex: navigationShell.currentIndex,
+            bottomNavigationBar: ColoredBox(
+              color: Colors.transparent,
+              child: BottomNavBar(selectedIndex: navigationShell.currentIndex),
             ),
           );
         },

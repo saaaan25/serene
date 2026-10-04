@@ -97,7 +97,7 @@ class _VaultScreenState extends State<VaultScreen> {
     final vaultItems = _getRealVaultItems();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.transparent,
       appBar: const SereneAppBar(),
       body: SafeArea(
         child: _isLoading

@@ -17,7 +17,7 @@ class AudioStreamDataSourceImpl implements AudioStreamDataSource {
       : _audioRecorder = audioRecorder ?? AudioRecorder();
 
   @override
-  Future<bool> hasPermission() => _audioRecorder.hasPermission();
+  Future<bool> hasPermission() => _audioRecorder.hasPermission(request: false);
 
   @override
   Future<Stream<Uint8List>> startStream() async {

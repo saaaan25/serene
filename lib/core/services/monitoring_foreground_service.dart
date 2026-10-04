@@ -33,17 +33,6 @@ class MonitoringForegroundService {
   Future<void> start() async {
     if (!Platform.isAndroid) return;
     initialize();
-    var notificationPermission =
-        await FlutterForegroundTask.checkNotificationPermission();
-    if (notificationPermission != NotificationPermission.granted) {
-      notificationPermission =
-          await FlutterForegroundTask.requestNotificationPermission();
-    }
-    if (notificationPermission != NotificationPermission.granted) {
-      throw StateError(
-        'Notification permission is required for visible background monitoring.',
-      );
-    }
 
     final result = await FlutterForegroundTask.startService(
       serviceId: 410,

@@ -63,7 +63,10 @@ class AppTranslations {
       'home_monitoring_paused': 'En pausa',
       'home_monitoring_unavailable': 'No disponible',
       'home_monitoring_error_hint':
-          'Revisa los permisos de micrófono y notificaciones en Ajustes.',
+          'No se pudo iniciar el monitoreo. Revisa el detalle y el permiso del micrófono.',
+      'home_monitoring_retry': 'Revisar permiso y reintentar',
+      'home_monitoring_settings_error':
+          'No se pudieron abrir los ajustes de la aplicación.',
       'home_latest_event_title': 'ÚLTIMO EVENTO',
       'home_no_events': 'Sin detecciones',
       'home_session_title': 'SESIÓN PROTEGIDA',
@@ -159,7 +162,9 @@ class AppTranslations {
       'home_monitoring_paused': 'Paused',
       'home_monitoring_unavailable': 'Unavailable',
       'home_monitoring_error_hint':
-          'Check microphone and notification permissions in Settings.',
+          'Monitoring could not start. Check the error and microphone permission.',
+      'home_monitoring_retry': 'Review permission and retry',
+      'home_monitoring_settings_error': 'Could not open the app settings.',
       'home_latest_event_title': 'LATEST EVENT',
       'home_no_events': 'No detections',
       'home_session_title': 'PROTECTED SESSION',

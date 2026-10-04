@@ -24,14 +24,26 @@ void main() {
       dataSource = AudioStreamDataSourceImpl(audioRecorder: mockRecorder);
     });
 
+    test('hasPermission checks without prompting automatically', () async {
+      when(
+        () => mockRecorder.hasPermission(request: false),
+      ).thenAnswer((_) async => true);
+
+      expect(await dataSource.hasPermission(), isTrue);
+
+      verify(() => mockRecorder.hasPermission(request: false)).called(1);
+    });
+
     test('startStream should throw AudioProcessingFailure if microphone permission is denied', () async {
-      when(() => mockRecorder.hasPermission()).thenAnswer((_) async => false);
+      when(
+        () => mockRecorder.hasPermission(request: false),
+      ).thenAnswer((_) async => false);
 
       expect(
         () async => await dataSource.startStream(),
         throwsA(isA<AudioProcessingFailure>()),
       );
-      verify(() => mockRecorder.hasPermission()).called(1);
+      verify(() => mockRecorder.hasPermission(request: false)).called(1);
       verifyNever(() => mockRecorder.startStream(any()));
     });
 
