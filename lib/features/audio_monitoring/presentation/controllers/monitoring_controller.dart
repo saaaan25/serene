@@ -7,6 +7,7 @@ import '../../domain/entities/audio_window.dart';
 import '../../domain/entities/inference_result.dart';
 import '../../domain/usecases/process_audio_stream_usecase.dart';
 import '../isolates/audio_processing_isolate.dart';
+import 'incident_capture_gate.dart';
 
 enum MonitoringStatus { idle, initializing, active, paused, error }
 
@@ -14,6 +15,7 @@ class MonitoringController extends ChangeNotifier {
   final ProcessAudioStreamUseCase _processAudioUseCase;
   final SaveEncryptedEvidenceUseCase _saveEvidenceUseCase;
   final MonitoringForegroundService _foregroundService;
+  final IncidentCaptureGate _incidentCaptureGate;
 
   AudioInferenceIsolate? _inferenceIsolate;
   StreamSubscription<AudioWindow>? _audioSubscription;
@@ -28,9 +30,11 @@ class MonitoringController extends ChangeNotifier {
     required ProcessAudioStreamUseCase processAudioUseCase,
     required SaveEncryptedEvidenceUseCase saveEvidenceUseCase,
     MonitoringForegroundService? foregroundService,
+    IncidentCaptureGate? incidentCaptureGate,
   }) : _processAudioUseCase = processAudioUseCase,
        _saveEvidenceUseCase = saveEvidenceUseCase,
-       _foregroundService = foregroundService ?? MonitoringForegroundService();
+       _foregroundService = foregroundService ?? MonitoringForegroundService(),
+       _incidentCaptureGate = incidentCaptureGate ?? IncidentCaptureGate();
 
   MonitoringStatus get status => _status;
   String? get errorMessage => _errorMessage;
@@ -45,6 +49,7 @@ class MonitoringController extends ChangeNotifier {
 
     _status = MonitoringStatus.initializing;
     _errorMessage = null;
+    _incidentCaptureGate.reset();
     notifyListeners();
 
     try {
@@ -111,15 +116,42 @@ class MonitoringController extends ChangeNotifier {
     if (_isProcessingWindow) return;
     _isProcessingWindow = true;
     try {
+      if (!_containsSignal(window.normalizedSamples)) {
+        debugPrint(
+          'Ignoring an all-zero audio window; microphone input may be silent.',
+        );
+        return;
+      }
       final result = await _inferenceIsolate!.predict(window.normalizedSamples);
       if (_status == MonitoringStatus.active && result.isViolenceDetected) {
+        if (!_incidentCaptureGate.canCaptureAt(window.timestamp)) {
+          debugPrint(
+            'Skipping repeated detection inside the '
+            '${_incidentCaptureGate.minimumInterval.inSeconds}-second '
+            'evidence interval: ${result.label} '
+            '(${(result.confidence * 100).toStringAsFixed(1)}%).',
+          );
+          return;
+        }
         await _handleIncidentDetected(window, result);
+        _incidentCaptureGate.markCapturedAt(window.timestamp);
+        debugPrint(
+          'Saved ${result.label} evidence at '
+          '${(result.confidence * 100).toStringAsFixed(1)}% confidence.',
+        );
       }
     } catch (error) {
       _failMonitoring('Audio inference failed: $error');
     } finally {
       _isProcessingWindow = false;
     }
+  }
+
+  bool _containsSignal(Float32List samples) {
+    for (final sample in samples) {
+      if (sample != 0) return true;
+    }
+    return false;
   }
 
   Future<void> _handleIncidentDetected(

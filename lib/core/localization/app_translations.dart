@@ -38,6 +38,22 @@ class AppTranslations {
       'vault_confirm_action': 'CONFIRMAR',
       'vault_cancel_action': 'Cancelar',
       'vault_empty_message': 'No hay evidencias grabadas en este dispositivo.',
+      'vault_audio_unavailable':
+          'Esta grabación ya no está disponible. Actualiza la lista e inténtalo de nuevo.',
+      'audio_screen_title': 'Reproducción segura',
+      'audio_auth_reason': 'Confirma tu identidad para escuchar esta grabación',
+      'audio_auth_cancelled':
+          'La autenticación se canceló. Confirma tu identidad para escuchar el audio.',
+      'audio_auth_retry': 'AUTENTICAR Y REPRODUCIR',
+      'audio_auth_loading': 'Validando tu identidad y preparando el audio…',
+      'audio_load_error':
+          'No se pudo validar tu identidad o abrir esta grabación. Inténtalo de nuevo.',
+      'audio_playback_error':
+          'No se pudo reproducir el audio. Inténtalo de nuevo.',
+      'audio_playback_failure_title': 'No se pudo abrir la grabación',
+      'audio_retry_action': 'Reintentar',
+      'audio_privacy_note':
+          'El audio se descifra solo después de validar tu identidad y se reproduce en memoria, sin guardarse como archivo.',
 
       // HomeScreen texts
       'home_monitoring_title': 'MONITOREO DE AUDIO',
@@ -119,6 +135,21 @@ class AppTranslations {
       'vault_confirm_action': 'CONFIRM',
       'vault_cancel_action': 'Cancel',
       'vault_empty_message': 'There is no evidence recorded on this device.',
+      'vault_audio_unavailable':
+          'This recording is no longer available. Refresh the list and try again.',
+      'audio_screen_title': 'Secure playback',
+      'audio_auth_reason': 'Verify your identity to listen to this recording',
+      'audio_auth_cancelled':
+          'Authentication was cancelled. Verify your identity to listen to the audio.',
+      'audio_auth_retry': 'AUTHENTICATE AND PLAY',
+      'audio_auth_loading': 'Verifying your identity and preparing the audio…',
+      'audio_load_error':
+          'Could not verify your identity or open this recording. Please try again.',
+      'audio_playback_error': 'Could not play the audio. Please try again.',
+      'audio_playback_failure_title': 'Recording could not be opened',
+      'audio_retry_action': 'Try again',
+      'audio_privacy_note':
+          'Audio is decrypted only after identity verification and played in memory without being saved as a file.',
 
       // HomeScreen texts
       'home_monitoring_title': 'AUDIO MONITORING',

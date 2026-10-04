@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
@@ -69,6 +70,20 @@ class _VaultScreenState extends State<VaultScreen> {
   Future<void> _deleteRecord(String id) async {
     await context.read<EvidenceRepository>().deleteEvidenceRecord(id);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _openAudio(
+    VaultItem item,
+    String Function(String) translate,
+  ) async {
+    final record = _evidenceBox?.get(item.id);
+    if (record == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(translate('vault_audio_unavailable'))),
+      );
+      return;
+    }
+    await context.push<void>('/vault/audio', extra: record.toEntity());
   }
 
   @override
@@ -196,6 +211,7 @@ class _VaultScreenState extends State<VaultScreen> {
                           child: _VaultItemCard(
                             item: item,
                             deleteActionText: t('vault_delete_action'),
+                            onTap: () => _openAudio(item, t),
                             onDelete: () {
                               showGeneralDialog<void>(
                                 context: context,
@@ -234,6 +250,7 @@ class _VaultScreenState extends State<VaultScreen> {
                                             ),
                                           );
                                         }
+
                                       },
                                     ),
                               );
@@ -253,11 +270,13 @@ class _VaultScreenState extends State<VaultScreen> {
 class _VaultItemCard extends StatelessWidget {
   final VaultItem item;
   final String deleteActionText;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _VaultItemCard({
     required this.item,
     required this.deleteActionText,
+    required this.onTap,
     required this.onDelete,
   });
 
@@ -266,58 +285,69 @@ class _VaultItemCard extends StatelessWidget {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final tertiaryColor = Theme.of(context).colorScheme.tertiary;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryColor.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: primaryColor.withValues(alpha: 0.15),
-            ),
-            child: Icon(Icons.mic, color: primaryColor),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: primaryColor.withValues(alpha: 0.1)),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  item.name,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: primaryColor.withValues(alpha: 0.15),
+                  ),
+                  child: Icon(Icons.mic, color: primaryColor),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_formatDate(item.date)} • ${_formatTime(item.date)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_formatDate(item.date)} • ${_formatTime(item.date)}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                Icon(Icons.lock, color: tertiaryColor, size: 20),
+                PopupMenuButton<void>(
+                  itemBuilder: (context) => [
+                    PopupMenuItem<void>(
+                      onTap: onDelete,
+                      child: Text(deleteActionText),
+                    ),
+                  ],
+                  child: Icon(
+                    Icons.more_vert,
+                    color: primaryColor.withValues(alpha: 0.6),
                   ),
                 ),
               ],
             ),
           ),
-          Icon(Icons.lock, color: tertiaryColor, size: 20),
-          PopupMenuButton(
-            itemBuilder: (context) => [
-              PopupMenuItem(onTap: onDelete, child: Text(deleteActionText)),
-            ],
-            child: Icon(
-              Icons.more_vert,
-              color: primaryColor.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -5,7 +5,12 @@ import 'package:serene/features/auth/presentation/screens/auth_screen.dart';
 import 'package:serene/features/home/presentation/screens/home_screen.dart';
 import 'package:serene/features/settings/presentation/screens/settings_screen.dart';
 import 'package:serene/features/evidence_vault/presentation/screens/vault_screen.dart';
+import 'package:serene/features/evidence_vault/presentation/screens/audio_playback_screen.dart';
+import 'package:serene/features/evidence_vault/domain/entities/evidence_record.dart';
 import 'package:serene/core/services/session_manager.dart';
+import 'package:serene/app/controllers/app_settings_controller.dart';
+import 'package:serene/core/localization/app_translations.dart';
+import 'package:provider/provider.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -90,6 +95,20 @@ GoRouter createRouter(SessionManager sessionManager) {
           ),
         ],
       ),
+      GoRoute(
+        path: '/vault/audio',
+        name: 'vault-audio',
+        parentNavigatorKey: _rootNavigatorKey,
+        pageBuilder: (context, state) {
+          final record = state.extra;
+          return MaterialPage<void>(
+            key: state.pageKey,
+            child: record is EvidenceRecord
+                ? AudioPlaybackScreen(record: record)
+                : const _InvalidAudioRouteScreen(),
+          );
+        },
+      ),
     ],
     errorPageBuilder: (context, state) => MaterialPage<void>(
       key: state.pageKey,
@@ -125,4 +144,22 @@ GoRouter createRouter(SessionManager sessionManager) {
       ),
     ),
   );
+}
+
+class _InvalidAudioRouteScreen extends StatelessWidget {
+  const _InvalidAudioRouteScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Text(
+          AppTranslations.tr(
+            'vault_audio_unavailable',
+            context.read<AppSettingsController>().locale,
+          ),
+        ),
+      ),
+    );
+  }
 }
