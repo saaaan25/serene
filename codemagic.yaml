@@ -14,14 +14,9 @@ workflows:
       - name: Instalar dependencias Flutter
         script: |
           flutter packages pub get
-      - name: Purgar referencias residuales de SelectTfOps en project.pbxproj
+      - name: Instalar dependencias nativas de iOS
         script: |
           cd ios
-          # Eliminar cualquier línea en project.pbxproj que mencione TensorFlowLiteSelectTfOps
-          sed -i '' '/TensorFlowLiteSelectTfOps/d' Runner.xcodeproj/project.pbxproj
-          # Limpiar cachés y pods previos
-          rm -rf Pods Podfile.lock .symlinks ~/Library/Caches/CocoaPods
-          pod deintegrate || true
           pod install --repo-update
           cd ..
       - name: Compilar iOS Release
