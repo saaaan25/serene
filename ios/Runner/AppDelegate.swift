@@ -1,12 +1,5 @@
 import Flutter
-import TensorFlowLiteSelectTfOps
 import UIKit
-
-private final class FlexDelegateHolder {
-  static var shared: FlexDelegateHolder = FlexDelegateHolder()
-  var delegate: TfLiteFlexDelegate? = nil
-  var pointer: UnsafeMutableRawPointer? = nil
-}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -29,36 +22,21 @@ private final class FlexDelegateHolder {
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "createFlexDelegate":
-        do {
-          let holder = FlexDelegateHolder.shared
-          if holder.delegate == nil {
-            let created = TfLiteFlexDelegate()
-            holder.delegate = created
-            holder.pointer = UnsafeMutableRawPointer(Unmanaged.passUnretained(created).toOpaque())
-          }
-          guard let pointer = holder.pointer else {
-            result(
-              FlutterError(
-                code: "flex_delegate_init_failed",
-                message: "Could not resolve the TensorFlow Flex delegate pointer",
-                details: nil
-              )
-            )
-            return
-          }
-          result(Int64(Int(bitPattern: pointer)))
-        } catch {
+        let address = FlexDelegateBridge.createDelegate()
+        if address == 0 {
           result(
             FlutterError(
               code: "flex_delegate_init_failed",
-              message: "Could not initialize TensorFlow Select Ops: \(error.localizedDescription)",
+              message: "Could not resolve the TensorFlow Flex delegate. "
+                + "Verify TensorFlowLiteSelectTfOps is linked and force-loaded.",
               details: nil
             )
           )
+          return
         }
+        result(address)
       case "disposeFlexDelegate":
-        FlexDelegateHolder.shared.delegate = nil
-        FlexDelegateHolder.shared.pointer = nil
+        FlexDelegateBridge.disposeDelegate()
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
