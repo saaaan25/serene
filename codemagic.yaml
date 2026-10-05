@@ -22,9 +22,26 @@ workflows:
           cd ios
           pod install --repo-update
           cd ..
+      - name: Verificar pods de TensorFlow Lite
+        script: |
+          cd ios
+          echo "--- Pods de TensorFlow Lite instalados ---"
+          grep -E 'TensorFlowLite' Podfile.lock || true
+          ls -d Pods/TensorFlowLiteSelectTfOps/Frameworks/TensorFlowLiteSelectTfOps.xcframework
+          cd ..
       - name: Compilar iOS Release
         script: |
           flutter build ios --release --no-codesign
+      - name: Verificar delegate Select TF Ops en el binario
+        script: |
+          BIN="build/ios/iphoneos/Runner.app/Runner"
+          echo "--- Simbolos Flex en el binario final ---"
+          xcrun nm -g "$BIN" | grep -i flex || echo "(sin simbolos flex)"
+          if xcrun nm -g "$BIN" | grep -q '_TF_AcquireFlexDelegate'; then
+            echo "OK: _TF_AcquireFlexDelegate esta presente en el binario."
+          else
+            echo "AVISO: _TF_AcquireFlexDelegate NO esta en el binario. TFLite no podra aplicar el delegate Flex y la inferencia fallara con 'Unable to create interpreter'."
+          fi
       - name: Empaquetar a IPA
         script: |
           cd build/ios/iphoneos

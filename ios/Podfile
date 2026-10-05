@@ -42,6 +42,26 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # El modelo (assets/models/model.tflite) usa el op `FlexErf`, que solo
+  # existe dentro del pod TensorFlowLiteSelectTfOps. Si ese pod no queda
+  # instalado, el enlace y el pod install igual "funcionan" pero TFLite no
+  # puede crear el interpreter en tiempo de ejecucion y la app falla con
+  # "Unable to create interpreter". Fallamos aqui y no en el dispositivo.
+  flex_xcframework = File.join(
+    installer.sandbox.root,
+    'TensorFlowLiteSelectTfOps',
+    'Frameworks',
+    'TensorFlowLiteSelectTfOps.xcframework',
+  )
+  unless Dir.exist?(flex_xcframework)
+    abort(
+      "No se encontro el pod TensorFlowLiteSelectTfOps en " \
+      "#{installer.sandbox.root}.\n" \
+      "Verifica que ios/Podfile declare el pod y que su version exista en el " \
+      'repo de CocoaPods.'
+    )
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
@@ -49,7 +69,10 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-      config.build_settings['DEAD_CODE_STRIPPING'] = 'YES'
+      # El delegate Select TF Ops se localiza en runtime con
+      # dlsym(RTLD_DEFAULT, "TF_AcquireFlexDelegate"), por lo que el enlazador
+      # no puede describir esa referencia y terminaria eliminandola.
+      config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
       if target.name == 'permission_handler_apple'
         config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
           '$(inherited)',
