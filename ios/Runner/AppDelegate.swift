@@ -17,7 +17,7 @@ import UIKit
 
     let channel = FlutterMethodChannel(
       name: AppDelegate.flexDelegateChannelName,
-      binaryMessenger: engineBridge.applicationBinaryMessenger
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
