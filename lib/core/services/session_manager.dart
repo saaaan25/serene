@@ -6,8 +6,19 @@ class SessionManager extends ChangeNotifier {
   DateTime _lastActivity = DateTime.now();
   bool _isAuthenticated = false;
   Timer? _timeoutTimer;
+  int _activeAuthenticationPrompts = 0;
 
   bool get isAuthenticated => _isAuthenticated;
+  bool get isAuthenticationPromptActive => _activeAuthenticationPrompts > 0;
+
+  void beginAuthenticationPrompt() {
+    _activeAuthenticationPrompts++;
+  }
+
+  void endAuthenticationPrompt() {
+    if (_activeAuthenticationPrompts == 0) return;
+    _activeAuthenticationPrompts--;
+  }
 
   void markAuthenticated() {
     _isAuthenticated = true;

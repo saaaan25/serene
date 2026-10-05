@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/localization/app_translations.dart';
+import '../../../../core/services/session_manager.dart';
 import '../../domain/entities/evidence_record.dart';
 import '../../domain/repositories/evidence_repository.dart';
 import '../widgets/in_memory_audio_player.dart';
@@ -47,6 +48,8 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
     });
 
     final locale = context.read<AppSettingsController>().locale;
+    final sessionManager = context.read<SessionManager>();
+    final evidenceRepository = context.read<EvidenceRepository>();
     try {
       final isSupported =
           await _localAuth.canCheckBiometrics ||
@@ -56,22 +59,29 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
         return;
       }
 
-      final authenticated = await _localAuth.authenticate(
-        localizedReason: AppTranslations.tr('audio_auth_reason', locale),
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
-      );
+      sessionManager.beginAuthenticationPrompt();
+      late final bool authenticated;
+      try {
+        authenticated = await _localAuth.authenticate(
+          localizedReason: AppTranslations.tr('audio_auth_reason', locale),
+          options: const AuthenticationOptions(
+            stickyAuth: true,
+            biometricOnly: false,
+          ),
+        );
+      } finally {
+        sessionManager.endAuthenticationPrompt();
+      }
+
       if (!authenticated) {
         _setError('audio_auth_cancelled');
         return;
       }
       if (!mounted) return;
 
-      final pcmBytes = await context
-          .read<EvidenceRepository>()
-          .getDecryptedAudioBytes(widget.record);
+      final pcmBytes = await evidenceRepository.getDecryptedAudioBytes(
+        widget.record,
+      );
       late final Uint8List wavBytes;
       try {
         if (pcmBytes.isEmpty || pcmBytes.length.isOdd) {
@@ -204,6 +214,11 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
                   color: colors.onSurface.withValues(alpha: 0.65),
                 ),
               ),
+              const SizedBox(height: 20),
+              _EvidenceMetadata(
+                record: widget.record,
+                translate: t,
+              ),
               const SizedBox(height: 24),
               if (_decryptedWav case final audio?)
                 InMemoryAudioPlayer(
@@ -252,6 +267,101 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EvidenceMetadata extends StatelessWidget {
+  const _EvidenceMetadata({
+    required this.record,
+    required this.translate,
+  });
+
+  final EvidenceRecord record;
+  final String Function(String) translate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final location = record.gpsCoordinates.isEmpty
+        ? translate('audio_metadata_location_unavailable')
+        : record.gpsCoordinates.entries
+              .map((entry) => '${entry.key}: ${entry.value}')
+              .join(', ');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            translate('audio_metadata_title'),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _MetadataRow(label: translate('audio_metadata_id'), value: record.id),
+          _MetadataRow(
+            label: translate('audio_metadata_confidence'),
+            value: '${record.confidenceScore * 100}%',
+          ),
+          _MetadataRow(
+            label: translate('audio_metadata_location'),
+            value: location,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataRow extends StatelessWidget {
+  const _MetadataRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

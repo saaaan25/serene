@@ -45,7 +45,21 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
   Future<void> removeRecord(String id) async {
     try {
       final box = await _openBox();
-      await box.delete(id);
+      if (box.containsKey(id)) {
+        await box.delete(id);
+        return;
+      }
+
+      Object? legacyKey;
+      for (final key in box.keys) {
+        if (box.get(key)?.id == id) {
+          legacyKey = key;
+          break;
+        }
+      }
+      if (legacyKey != null) {
+        await box.delete(legacyKey);
+      }
     } catch (e) {
       throw DatabaseFailure('Error: $e');
     }

@@ -14,6 +14,7 @@ import 'features/evidence_vault/data/models/evidence_record_model.dart';
 import 'features/evidence_vault/domain/repositories/evidence_repository.dart';
 import 'features/evidence_vault/presentation/controllers/evidence_controller.dart';
 import 'core/constants/hive_constants.dart';
+import 'core/services/recorder_leak_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,8 @@ void main() async {
 
   // Open Hive boxes
   await Hive.openBox<EvidenceRecordModel>(HiveConstants.encryptedEvidenceBox);
+
+  await RecorderLeakGuard.install();
 
   // Initialize service locator (dependency injection)
   // This will open the appSettings box and create AppSettingsController

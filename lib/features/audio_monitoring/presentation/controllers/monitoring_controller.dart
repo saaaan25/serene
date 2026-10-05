@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/services/monitoring_foreground_service.dart';
 import '../../../evidence_vault/domain/usecases/save_encrypted_evidence_usecase.dart';
@@ -11,7 +12,7 @@ import 'incident_capture_gate.dart';
 
 enum MonitoringStatus { idle, initializing, active, paused, error }
 
-class MonitoringController extends ChangeNotifier {
+class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   final ProcessAudioStreamUseCase _processAudioUseCase;
   final SaveEncryptedEvidenceUseCase _saveEvidenceUseCase;
   final MonitoringForegroundService _foregroundService;
@@ -34,12 +35,44 @@ class MonitoringController extends ChangeNotifier {
   }) : _processAudioUseCase = processAudioUseCase,
        _saveEvidenceUseCase = saveEvidenceUseCase,
        _foregroundService = foregroundService ?? MonitoringForegroundService(),
-       _incidentCaptureGate = incidentCaptureGate ?? IncidentCaptureGate();
+       _incidentCaptureGate = incidentCaptureGate ?? IncidentCaptureGate() {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   MonitoringStatus get status => _status;
   String? get errorMessage => _errorMessage;
   String get lastDetectedClass => _lastDetectedClass;
   bool get isMonitoring => _status == MonitoringStatus.active;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        unawaited(_stopAfterLeavingForeground());
+      case AppLifecycleState.resumed:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _stopAfterLeavingForeground() async {
+    if (_status != MonitoringStatus.active &&
+        _status != MonitoringStatus.initializing) {
+      return;
+    }
+    try {
+      await _stopResources();
+      _status = MonitoringStatus.paused;
+      _errorMessage = null;
+    } catch (error) {
+      debugPrint('Could not release audio resources on app detach: $error');
+      _status = MonitoringStatus.error;
+      _errorMessage = 'Could not release audio resources: $error';
+    }
+    notifyListeners();
+  }
 
   Future<void> startMonitoring() async {
     if (_status == MonitoringStatus.active ||
@@ -256,6 +289,7 @@ class MonitoringController extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(
       _stopResources().catchError((Object error) {
         debugPrint('Error disposing audio monitoring: $error');

@@ -41,16 +41,22 @@ void main() {
     );
   }
 
-  test('It should insert and fetch an EvidenceRecordModel in Hive Box', () async {
-    final model = createTestModel();
-    await dataSource.insertRecord(model);
-    final records = await dataSource.fetchAllRecords();
+  test(
+    'It should insert and fetch an EvidenceRecordModel in Hive Box',
+    () async {
+      final model = createTestModel();
+      await dataSource.insertRecord(model);
+      final records = await dataSource.fetchAllRecords();
 
-    expect(records.length, equals(1));
-    expect(records.first.id, equals('test-uuid-123'));
-    expect(records.first.predictionLabel, equals('physical_violence'));
-    expect(records.first.encryptedAudioBlob, equals(Uint8List.fromList([1, 2, 3])));
-  });
+      expect(records.length, equals(1));
+      expect(records.first.id, equals('test-uuid-123'));
+      expect(records.first.predictionLabel, equals('physical_violence'));
+      expect(
+        records.first.encryptedAudioBlob,
+        equals(Uint8List.fromList([1, 2, 3])),
+      );
+    },
+  );
 
   test('It should remove a specific record by its primary key', () async {
     final model = createTestModel();
@@ -60,4 +66,19 @@ void main() {
 
     expect(records.isEmpty, isTrue);
   });
+
+  test(
+    'It should remove legacy records stored under an auto-generated key',
+    () async {
+      final model = createTestModel();
+      final box = await Hive.openBox<EvidenceRecordModel>(
+        HiveConstants.encryptedEvidenceBox,
+      );
+      await box.add(model);
+
+      await dataSource.removeRecord(model.id);
+
+      expect(box.isEmpty, isTrue);
+    },
+  );
 }

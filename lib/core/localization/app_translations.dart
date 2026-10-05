@@ -52,6 +52,11 @@ class AppTranslations {
           'No se pudo reproducir el audio. Inténtalo de nuevo.',
       'audio_playback_failure_title': 'No se pudo abrir la grabación',
       'audio_retry_action': 'Reintentar',
+      'audio_metadata_title': 'Detalles de la evidencia',
+      'audio_metadata_id': 'ID',
+      'audio_metadata_confidence': 'Confianza',
+      'audio_metadata_location': 'Ubicación',
+      'audio_metadata_location_unavailable': 'No disponible',
       'audio_privacy_note':
           'El audio se descifra solo después de validar tu identidad y se reproduce en memoria, sin guardarse como archivo.',
 
@@ -151,6 +156,11 @@ class AppTranslations {
       'audio_playback_error': 'Could not play the audio. Please try again.',
       'audio_playback_failure_title': 'Recording could not be opened',
       'audio_retry_action': 'Try again',
+      'audio_metadata_title': 'Evidence details',
+      'audio_metadata_id': 'ID',
+      'audio_metadata_confidence': 'Confidence',
+      'audio_metadata_location': 'Location',
+      'audio_metadata_location_unavailable': 'Unavailable',
       'audio_privacy_note':
           'Audio is decrypted only after identity verification and played in memory without being saved as a file.',
 

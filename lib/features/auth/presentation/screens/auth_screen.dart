@@ -39,6 +39,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final settingsController = context.read<AppSettingsController>();
     final currentLocale = settingsController.locale;
 
+    final sessionManager = context.read<SessionManager>();
     try {
       final isSupported =
           await _localAuth.canCheckBiometrics ||
@@ -54,16 +55,23 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
 
-      final authenticated = await _localAuth.authenticate(
-        localizedReason: AppTranslations.tr('auth_reason', currentLocale),
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
-      );
+      sessionManager.beginAuthenticationPrompt();
+      late final bool authenticated;
+      try {
+        authenticated = await _localAuth.authenticate(
+          localizedReason: AppTranslations.tr('auth_reason', currentLocale),
+          options: const AuthenticationOptions(
+            stickyAuth: true,
+            biometricOnly: false,
+          ),
+        );
+      } finally {
+        sessionManager.endAuthenticationPrompt();
+      }
 
       if (authenticated && mounted) {
-        _onAuthSuccess();
+        sessionManager.markAuthenticated();
+        context.go('/home');
       } else if (mounted) {
         setState(() {
           _errorMessageKey = 'auth_cancelled';
@@ -78,11 +86,6 @@ class _AuthScreenState extends State<AuthScreen> {
         });
       }
     }
-  }
-
-  void _onAuthSuccess() {
-    context.read<SessionManager>().markAuthenticated();
-    context.go('/home');
   }
 
   @override

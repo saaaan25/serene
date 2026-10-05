@@ -16,25 +16,35 @@ class InMemoryAudioSource extends StreamAudioSource {
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
-    // Return the requested range of audio bytes
     final length = audioData.length;
-    final actualStart = (start ?? 0);
-    final actualEnd = (end ?? length);
 
-    if (actualStart >= actualEnd || actualStart >= length) {
+    if (length == 0) {
       return StreamAudioResponse(
+        rangeRequestsSupported: false,
         contentLength: 0,
-        offset: actualStart,
-        sourceLength: length,
-        stream: Stream.empty(),
+        offset: null,
+        sourceLength: 0,
+        stream: const Stream<List<int>>.empty(),
         contentType: 'audio/wav',
       );
     }
 
-    final data = audioData.sublist(
-      actualStart,
-      actualEnd > length ? length : actualEnd,
-    );
+    final actualStart = (start ?? 0).clamp(0, length);
+    final requestedEnd = end ?? length;
+    final actualEnd = requestedEnd.clamp(actualStart, length);
+
+    if (actualStart >= length || actualEnd <= actualStart) {
+      return StreamAudioResponse(
+        rangeRequestsSupported: false,
+        contentLength: 0,
+        offset: null,
+        sourceLength: length,
+        stream: const Stream<List<int>>.empty(),
+        contentType: 'audio/wav',
+      );
+    }
+
+    final data = audioData.sublist(actualStart, actualEnd);
 
     return StreamAudioResponse(
       contentLength: data.length,

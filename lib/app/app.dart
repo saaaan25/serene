@@ -308,6 +308,10 @@ class _AppPrivacyGuardState extends State<_AppPrivacyGuard>
       return;
     }
 
+    if (widget.sessionManager.isAuthenticationPromptActive) {
+      return;
+    }
+
     if (!_isObscured && mounted) {
       setState(() => _isObscured = true);
     }

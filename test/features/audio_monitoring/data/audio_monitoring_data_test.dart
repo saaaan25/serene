@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -35,16 +36,69 @@ void main() {
     });
 
     test('startStream should throw AudioProcessingFailure if microphone permission is denied', () async {
+      when(() => mockRecorder.isRecording()).thenAnswer((_) async => false);
       when(
         () => mockRecorder.hasPermission(request: false),
       ).thenAnswer((_) async => false);
 
-      expect(
+      await expectLater(
         () async => await dataSource.startStream(),
         throwsA(isA<AudioProcessingFailure>()),
       );
       verify(() => mockRecorder.hasPermission(request: false)).called(1);
+      verifyNever(() => mockRecorder.isRecording());
       verifyNever(() => mockRecorder.startStream(any()));
+    });
+
+    test('startStream stops an existing recording before opening a new stream', () async {
+      final audioStream = Stream<Uint8List>.empty();
+      when(() => mockRecorder.isRecording()).thenAnswer((_) async => true);
+      when(() => mockRecorder.stop()).thenAnswer((_) async => null);
+      when(
+        () => mockRecorder.hasPermission(request: false),
+      ).thenAnswer((_) async => true);
+      when(() => mockRecorder.startStream(any()))
+          .thenAnswer((_) async => audioStream);
+
+      expect(await dataSource.startStream(), same(audioStream));
+
+      verifyInOrder([
+        () => mockRecorder.hasPermission(request: false),
+        () => mockRecorder.isRecording(),
+        () => mockRecorder.stop(),
+        () => mockRecorder.startStream(any()),
+      ]);
+    });
+
+    test('startStream recreates and retries the native recorder after a failure', () async {
+      final firstRecorder = MockAudioRecorder();
+      final replacementRecorder = MockAudioRecorder();
+      final audioStream = Stream<Uint8List>.empty();
+      final recoveringDataSource = AudioStreamDataSourceImpl(
+        audioRecorder: firstRecorder,
+        recorderFactory: () => replacementRecorder,
+      );
+      when(
+        () => firstRecorder.hasPermission(request: false),
+      ).thenAnswer((_) async => true);
+      when(
+        () => firstRecorder.isRecording(),
+      ).thenAnswer((_) async => false);
+      when(
+        () => firstRecorder.startStream(any()),
+      ).thenThrow(StateError('Native recorder failed'));
+      when(() => firstRecorder.dispose()).thenAnswer((_) async {});
+      when(
+        () => replacementRecorder.hasPermission(request: false),
+      ).thenAnswer((_) async => true);
+      when(
+        () => replacementRecorder.startStream(any()),
+      ).thenAnswer((_) async => audioStream);
+
+      expect(await recoveringDataSource.startStream(), same(audioStream));
+
+      verify(() => firstRecorder.dispose()).called(1);
+      verify(() => replacementRecorder.startStream(any())).called(1);
     });
 
     test('stopStream should delegate the closure to the native hardware', () async {

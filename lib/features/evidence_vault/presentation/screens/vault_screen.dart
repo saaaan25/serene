@@ -76,8 +76,25 @@ class _VaultScreenState extends State<VaultScreen> {
     VaultItem item,
     String Function(String) translate,
   ) async {
-    final record = _evidenceBox?.get(item.id);
+    final box = _evidenceBox;
+    if (box == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(translate('vault_audio_unavailable'))),
+      );
+      return;
+    }
+
+    var record = box.get(item.id);
     if (record == null) {
+      for (final candidate in box.values) {
+        if (candidate.id == item.id) {
+          record = candidate;
+          break;
+        }
+      }
+    }
+
+    if (record == null || record.encryptedAudioBlob.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(translate('vault_audio_unavailable'))),
       );
@@ -140,7 +157,6 @@ class _VaultScreenState extends State<VaultScreen> {
                         children: [
                           Row(
                             children: [
-                              const SizedBox(width: 12),
                               Text(
                                 t('vault_private_access_badge'),
                                 style: Theme.of(context).textTheme.labelSmall
@@ -283,7 +299,6 @@ class _VaultItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final tertiaryColor = Theme.of(context).colorScheme.tertiary;
 
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainer,
@@ -331,7 +346,6 @@ class _VaultItemCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.lock, color: tertiaryColor, size: 20),
                 PopupMenuButton<void>(
                   itemBuilder: (context) => [
                     PopupMenuItem<void>(
