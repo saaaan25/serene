@@ -1,7 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 // tflite_flutter does not publicly export the native delegate pointer type.
@@ -72,6 +72,20 @@ class TfliteInferenceEngine {
     try {
       _ensureFlexDelegateIsLinked();
 
+      final resolvedModelBytes = modelBytes ?? await _loadModelBytes();
+      if (resolvedModelBytes.isEmpty) {
+        throw const AudioProcessingFailure(
+          'TFLite model asset is empty or unreadable. Check the asset path and bundle contents.',
+        );
+      }
+
+      if (flexDelegateAddress != null && flexDelegateAddress <= 0) {
+        throw AudioProcessingFailure(
+          'Flex delegate was created with an invalid native handle: $flexDelegateAddress. '
+          'Verify the Android Select TF Ops delegate or the iOS link configuration.',
+        );
+      }
+
       final labelText =
           labelsRaw ?? await rootBundle.loadString('assets/labels/labels.txt');
       _labels = labelText
@@ -80,22 +94,26 @@ class TfliteInferenceEngine {
           .where((e) => e.isNotEmpty)
           .toList();
 
-      // Configure the TFLite interpreter with 2 threads for better performance
       final options = InterpreterOptions()..threads = 2;
       if (flexDelegateAddress != null) {
-        options.addDelegate(
-          _FlexDelegatePointer(
-            Pointer<TfLiteDelegate>.fromAddress(flexDelegateAddress),
-          ),
+        final delegatePointer = Pointer<TfLiteDelegate>.fromAddress(
+          flexDelegateAddress,
         );
+        options.addDelegate(_FlexDelegatePointer(delegatePointer));
       }
 
-      _interpreter = modelBytes == null
-          ? await Interpreter.fromAsset(
-              'assets/models/model.tflite',
-              options: options,
-            )
-          : Interpreter.fromBuffer(modelBytes, options: options);
+      try {
+        _interpreter = Interpreter.fromBuffer(
+          resolvedModelBytes,
+          options: options,
+        );
+      } on Object catch (error) {
+        throw AudioProcessingFailure(
+          'Unable to create the TensorFlow Lite interpreter. '
+          'The model bytes are present, but the runtime could not initialize them. '
+          'Cause: $error',
+        );
+      }
 
       final inputShape = _interpreter!.getInputTensor(0).shape;
       final outputShape = _interpreter!.getOutputTensor(0).shape;
@@ -122,6 +140,27 @@ class TfliteInferenceEngine {
     } catch (e) {
       close();
       throw AudioProcessingFailure('Error: $e');
+    }
+  }
+
+  Future<Uint8List> _loadModelBytes() async {
+    try {
+      final modelData = await rootBundle.load('assets/models/model.tflite');
+      final bytes = modelData.buffer.asUint8List(
+        modelData.offsetInBytes,
+        modelData.lengthInBytes,
+      );
+      if (bytes.isEmpty) {
+        throw const AudioProcessingFailure(
+          'Model asset is empty. Check the asset file and Git/LFS state.',
+        );
+      }
+      return bytes;
+    } on FlutterError catch (error) {
+      throw AudioProcessingFailure(
+        'Model asset could not be loaded from assets/models/model.tflite. '
+        'Check pubspec.yaml and the bundle: $error',
+      );
     }
   }
 
