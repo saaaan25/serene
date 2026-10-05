@@ -28,13 +28,13 @@ class AudioInferenceIsolate {
     );
     final labelsRaw = await rootBundle.loadString('assets/labels/labels.txt');
     try {
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (Platform.isAndroid) {
         _flexDelegateAddress = await _flexDelegateChannel.invokeMethod<int>(
           'createFlexDelegate',
         );
         if (_flexDelegateAddress == null || _flexDelegateAddress == 0) {
           throw StateError(
-            'The platform did not create the TensorFlow Flex delegate',
+            'Android did not create the TensorFlow Flex delegate',
           );
         }
       }
