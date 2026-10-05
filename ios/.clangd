@@ -1,0 +1,23 @@
+# Configuracion de clangd para el codigo nativo de iOS.
+#
+# En Windows no existen los artefactos del motor iOS: ios/Pods y
+# Flutter.framework se generan solo en macOS con `pod install` /
+# `flutter build ios`. Por eso cualquier editor de C/C++ marca como
+# "file not found" los imports de
+#   Runner-Bridging-Header.h -> GeneratedPluginRegistrant.h -> <Flutter/Flutter.h>
+# aunque el codigo compile bien en Codemagic.
+#
+# El diagnostico se suprime solo en este directorio para no tapar errores reales
+# de include en el resto del proyecto.
+#
+# Ojo: esto silencia al editor, no al compilador. El codigo nativo de iOS
+# sigue necesitando macOS + Xcode para compilarse.
+CompileFlags:
+  Add:
+    - -I
+    - Runner
+
+Diagnostics:
+  Suppress:
+    - pp_missing_include_file
+    - pp_file_not_found
