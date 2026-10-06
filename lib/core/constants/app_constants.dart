@@ -13,5 +13,5 @@ abstract class AppConstants {
   static const String classVerbalViolence = 'verbal_violence';
   static const String classPhysicalViolence = 'physical_violence';
 
-  static const double classificationThreshold = 0.70; // to change
+  static const double classificationThreshold = 0.90; // to change
 }
