@@ -34,6 +34,10 @@ class MonitoringForegroundService {
     if (!Platform.isAndroid) return;
     initialize();
 
+    if (await FlutterForegroundTask.isRunningService) {
+      await stop();
+    }
+
     final result = await FlutterForegroundTask.startService(
       serviceId: 410,
       serviceTypes: const [ForegroundServiceTypes.microphone],

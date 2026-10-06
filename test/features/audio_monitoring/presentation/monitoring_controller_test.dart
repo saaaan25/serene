@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:serene/features/audio_monitoring/domain/entities/audio_window.dart';
@@ -50,15 +52,19 @@ void main() {
       expect(controller.lastDetectedClass, equals('None'));
     });
 
-    test('pauseMonitoring should not modify the state if monitoring was not active', () async {
-      await controller.pauseMonitoring();
-      expect(controller.status, equals(MonitoringStatus.idle));
-      expect(controller.isMonitoring, isFalse);
-    });
+    test(
+      'pauseMonitoring should not modify the state if monitoring was not active',
+      () async {
+        await controller.pauseMonitoring();
+        expect(controller.status, equals(MonitoringStatus.idle));
+        expect(controller.isMonitoring, isFalse);
+      },
+    );
 
     test('startMonitoring reports a denied microphone permission', () async {
-      when(() => mockProcessUseCase.hasMicrophonePermission())
-          .thenAnswer((_) async => false);
+      when(
+        () => mockProcessUseCase.hasMicrophonePermission(),
+      ).thenAnswer((_) async => false);
 
       await controller.startMonitoring();
 
@@ -67,36 +73,82 @@ void main() {
       expect(controller.errorMessage, contains('Microphone permission'));
       verify(() => mockProcessUseCase.hasMicrophonePermission()).called(1);
     });
+
+    test(
+      'leaving the foreground cancels a pending monitoring startup',
+      () async {
+        final permissionCheck = Completer<bool>();
+        when(
+          () => mockProcessUseCase.hasMicrophonePermission(),
+        ).thenAnswer((_) => permissionCheck.future);
+
+        final start = controller.startMonitoring();
+        await Future<void>.delayed(Duration.zero);
+        controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+        permissionCheck.complete(true);
+
+        await start;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(controller.status, MonitoringStatus.paused);
+        verifyNever(() => mockProcessUseCase.getAudioStream());
+      },
+    );
+
+    test('resuming after leaving the foreground retries monitoring', () async {
+      final startupFailed = Completer<void>();
+      when(
+        () => mockProcessUseCase.hasMicrophonePermission(),
+      ).thenAnswer((_) async => false);
+      controller.addListener(() {
+        if (controller.status == MonitoringStatus.error &&
+            !startupFailed.isCompleted) {
+          startupFailed.complete();
+        }
+      });
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future<void>.delayed(Duration.zero);
+      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await startupFailed.future.timeout(const Duration(seconds: 1));
+
+      expect(controller.status, MonitoringStatus.error);
+      verify(() => mockProcessUseCase.hasMicrophonePermission()).called(1);
+    });
   });
 
   group('Evidence Persistence', () {
-    test('It should call SaveEncryptedEvidenceUseCase when a violence incident is confirmed', () async {
-      when(() => mockSaveUseCase.call(any()))
-          .thenAnswer((_) async => Future.value());
+    test(
+      'It should call SaveEncryptedEvidenceUseCase when a violence incident is confirmed',
+      () async {
+        when(
+          () => mockSaveUseCase.call(any()),
+        ).thenAnswer((_) async => Future.value());
 
-      final dummyWindow = AudioWindow(
-        normalizedSamples: Float32List(80000),
-        rawPcmBytes: Uint8List(160000),
-        timestamp: DateTime.now(),
-      );
+        final dummyWindow = AudioWindow(
+          normalizedSamples: Float32List(80000),
+          rawPcmBytes: Uint8List(160000),
+          timestamp: DateTime.now(),
+        );
 
-      const dummyResult = InferenceResult(
-        label: 'physical_violence',
-        confidence: 0.91,
-        allScores: {'physical_violence': 0.91, 'no_violence': 0.09},
-        isViolenceDetected: true,
-      );
+        const dummyResult = InferenceResult(
+          label: 'physical_violence',
+          confidence: 0.91,
+          allScores: {'physical_violence': 0.91, 'no_violence': 0.09},
+          isViolenceDetected: true,
+        );
 
-      await mockSaveUseCase(
-        SaveEncryptedEvidenceParams(
-          rawAudioBytes: dummyWindow.rawPcmBytes,
-          predictionLabel: dummyResult.label,
-          confidenceScore: dummyResult.confidence,
-          gpsCoordinates: {'lat': -12.0463, 'lng': -77.0427},
-        ),
-      );
+        await mockSaveUseCase(
+          SaveEncryptedEvidenceParams(
+            rawAudioBytes: dummyWindow.rawPcmBytes,
+            predictionLabel: dummyResult.label,
+            confidenceScore: dummyResult.confidence,
+            gpsCoordinates: {'lat': -12.0463, 'lng': -77.0427},
+          ),
+        );
 
-      verify(() => mockSaveUseCase.call(any())).called(1);
-    });
+        verify(() => mockSaveUseCase.call(any())).called(1);
+      },
+    );
   });
 }

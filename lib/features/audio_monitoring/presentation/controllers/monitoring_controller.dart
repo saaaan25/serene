@@ -26,6 +26,9 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   bool _isProcessingWindow = false;
   bool _microphoneStreamStarted = false;
   bool _foregroundServiceStarted = false;
+  int _startGeneration = 0;
+  Future<void>? _startFuture;
+  Future<void>? _lifecycleStopFuture;
 
   MonitoringController({
     required ProcessAudioStreamUseCase processAudioUseCase,
@@ -52,56 +55,94 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.detached:
         unawaited(_stopAfterLeavingForeground());
       case AppLifecycleState.resumed:
+        if (_status == MonitoringStatus.paused) {
+          unawaited(startMonitoring());
+        }
       case AppLifecycleState.inactive:
         break;
     }
   }
 
   Future<void> _stopAfterLeavingForeground() async {
-    if (_status != MonitoringStatus.active &&
-        _status != MonitoringStatus.initializing) {
-      return;
-    }
-    try {
-      await _stopResources();
-      _status = MonitoringStatus.paused;
-      _errorMessage = null;
-    } catch (error) {
-      debugPrint('Could not release audio resources on app detach: $error');
-      _status = MonitoringStatus.error;
-      _errorMessage = 'Could not release audio resources: $error';
-    }
+    final pendingStop = _lifecycleStopFuture;
+    if (pendingStop != null) return pendingStop;
+
+    ++_startGeneration;
+    _status = MonitoringStatus.paused;
+    _errorMessage = null;
     notifyListeners();
+
+    final stopFuture = () async {
+      try {
+        final startFuture = _startFuture;
+        if (startFuture != null) await startFuture;
+        await _stopResources(forceForegroundServiceStop: true);
+      } catch (error) {
+        debugPrint('Could not release audio resources on app detach: $error');
+        _status = MonitoringStatus.error;
+        _errorMessage = 'Could not release audio resources: $error';
+      }
+      notifyListeners();
+    }();
+    _lifecycleStopFuture = stopFuture;
+    try {
+      await stopFuture;
+    } finally {
+      if (identical(_lifecycleStopFuture, stopFuture)) {
+        _lifecycleStopFuture = null;
+      }
+    }
   }
 
   Future<void> startMonitoring() async {
+    final lifecycleStop = _lifecycleStopFuture;
+    if (lifecycleStop != null) await lifecycleStop;
+
     if (_status == MonitoringStatus.active ||
         _status == MonitoringStatus.initializing) {
       return;
     }
 
+    final generation = ++_startGeneration;
     _status = MonitoringStatus.initializing;
     _errorMessage = null;
     _incidentCaptureGate.reset();
     notifyListeners();
 
+    final startFuture = _startMonitoring(generation);
+    _startFuture = startFuture;
     try {
+      await startFuture;
+    } finally {
+      if (identical(_startFuture, startFuture)) _startFuture = null;
+    }
+  }
+
+  Future<void> _startMonitoring(int generation) async {
+    try {
+      await _stopResources(forceForegroundServiceStop: true);
+      if (generation != _startGeneration) return;
+
       debugPrint('Checking microphone permission for monitoring.');
       if (!await _processAudioUseCase.hasMicrophonePermission()) {
         throw StateError('Microphone permission was not granted.');
       }
+      if (generation != _startGeneration) return;
       debugPrint('Initializing TensorFlow Lite inference worker.');
 
       _inferenceIsolate = AudioInferenceIsolate();
       await _inferenceIsolate!.initialize();
+      if (generation != _startGeneration) return;
       debugPrint('TensorFlow Lite inference worker is ready.');
 
       await _foregroundService.start();
       _foregroundServiceStarted = true;
+      if (generation != _startGeneration) return;
       debugPrint('Android foreground monitoring service is running.');
 
       final audioStream = await _processAudioUseCase.getAudioStream();
       _microphoneStreamStarted = true;
+      if (generation != _startGeneration) return;
       debugPrint('Microphone audio stream is running.');
       _audioSubscription = audioStream.listen(
         _processAudioWindow,
@@ -115,12 +156,23 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         },
       );
 
+      if (generation != _startGeneration) return;
       _status = MonitoringStatus.active;
       notifyListeners();
     } catch (error) {
+      if (generation != _startGeneration) {
+        try {
+          await _stopResources(forceForegroundServiceStop: true);
+        } catch (cleanupError) {
+          debugPrint(
+            'Error cleaning up cancelled monitoring startup: $cleanupError',
+          );
+        }
+        return;
+      }
       var startupError = error;
       try {
-        await _stopResources();
+        await _stopResources(forceForegroundServiceStop: true);
       } catch (cleanupError) {
         startupError = '$error; resource cleanup also failed: $cleanupError';
       }
@@ -246,37 +298,41 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _stopResources() async {
+  Future<void> _stopResources({bool forceForegroundServiceStop = false}) async {
     final errors = <Object>[];
     final subscription = _audioSubscription;
-    _audioSubscription = null;
-    try {
-      await subscription?.cancel();
-    } catch (error) {
-      errors.add(error);
+    if (subscription != null) {
+      try {
+        await subscription.cancel();
+        _audioSubscription = null;
+      } catch (error) {
+        errors.add(error);
+      }
     }
 
     if (_microphoneStreamStarted) {
-      _microphoneStreamStarted = false;
       try {
         await _processAudioUseCase.stop();
+        _microphoneStreamStarted = false;
       } catch (error) {
         errors.add(error);
       }
     }
 
     final inferenceIsolate = _inferenceIsolate;
-    _inferenceIsolate = null;
-    try {
-      await inferenceIsolate?.dispose();
-    } catch (error) {
-      errors.add(error);
+    if (inferenceIsolate != null) {
+      try {
+        await inferenceIsolate.dispose();
+        _inferenceIsolate = null;
+      } catch (error) {
+        errors.add(error);
+      }
     }
 
-    if (_foregroundServiceStarted) {
-      _foregroundServiceStarted = false;
+    if (_foregroundServiceStarted || forceForegroundServiceStop) {
       try {
         await _foregroundService.stop();
+        _foregroundServiceStarted = false;
       } catch (error) {
         errors.add(error);
       }
@@ -290,11 +346,16 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(
-      _stopResources().catchError((Object error) {
+    ++_startGeneration;
+    final startFuture = _startFuture;
+    unawaited(() async {
+      try {
+        if (startFuture != null) await startFuture;
+        await _stopResources(forceForegroundServiceStop: true);
+      } catch (error) {
         debugPrint('Error disposing audio monitoring: $error');
-      }),
-    );
+      }
+    }());
     super.dispose();
   }
 }
