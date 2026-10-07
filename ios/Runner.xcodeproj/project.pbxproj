@@ -374,9 +374,6 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load",
-					"$(SRCROOT)/Pods/TensorFlowLiteSelectTfOps/Frameworks/TensorFlowLiteSelectTfOps.xcframework/ios-arm64/TensorFlowLiteSelectTfOps.framework/TensorFlowLiteSelectTfOps",
-					"-Wl,-u,_TF_AcquireFlexDelegate",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.serene;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -559,9 +556,6 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load",
-					"$(SRCROOT)/Pods/TensorFlowLiteSelectTfOps/Frameworks/TensorFlowLiteSelectTfOps.xcframework/ios-arm64/TensorFlowLiteSelectTfOps.framework/TensorFlowLiteSelectTfOps",
-					"-Wl,-u,_TF_AcquireFlexDelegate",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.serene;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -587,9 +581,6 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load",
-					"$(SRCROOT)/Pods/TensorFlowLiteSelectTfOps/Frameworks/TensorFlowLiteSelectTfOps.xcframework/ios-arm64/TensorFlowLiteSelectTfOps.framework/TensorFlowLiteSelectTfOps",
-					"-Wl,-u,_TF_AcquireFlexDelegate",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.serene;
 				PRODUCT_NAME = "$(TARGET_NAME)";

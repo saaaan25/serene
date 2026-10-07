@@ -12,22 +12,47 @@ incident is saved; an evidence record has no coordinates if location is
 unavailable or permission is denied. If microphone or notification access is
 denied, enable it in the device's app settings and reopen Serene.
 
-On Android, monitoring uses a microphone foreground service and can continue
-while the app is in the background. On iOS, audio background mode is enabled;
-background execution is subject to iOS audio-session and system policies.
+The monitoring controller currently pauses audio monitoring when the app leaves
+the foreground on both platforms. iOS audio background mode is not configured.
 
-For iOS builds, run `pod install` from the `ios` directory on macOS after
-`flutter pub get`. Before `pod install`, run
-`ruby tool/align_tflite_ios_podspec.rb` from the repository root to align the
-iOS TensorFlow Lite pod versions. iOS builds cannot be produced on Windows.
+For iOS builds (including Codemagic), run `flutter pub get`, then
+`ruby tool/align_tflite_ios_podspec.rb` from the repository root, followed by
+`pod update TensorFlowLiteSwift TensorFlowLiteC --repo-update` in `ios`.
+The script changes the plugin's CocoaPods dependency to TensorFlow Lite 2.17.0.
+Codemagic checks that both pods resolve to exactly 2.17.0 before building.
+iOS builds cannot be produced on Windows.
 
-The bundled audio model uses a TensorFlow Select op (`FlexErf`). Android
-includes the Select TF Ops runtime and creates its delegate before inference.
-iOS uses the matching `0.0.1-nightly.20230414` builds of
-`TensorFlowLiteSwift` and `TensorFlowLiteSelectTfOps`. `tflite_flutter 0.12.1`
-pins its iOS runtime to `2.12.0`; the alignment script updates that podspec
-dependency before CocoaPods resolves dependencies. Keep both native runtimes
-on the same version to avoid unresolved TensorFlow/Protobuf symbols at link time.
-The prebuilt iOS framework supports physical arm64 devices, not the iOS
-simulator; simulator builds need a Select TF Ops framework built for the
-simulator architecture.
+The current bundled model contains built-in operators, including FULLY_CONNECTED
+version 12; it does not contain FlexErf. iOS therefore uses the standard runtime
+without TensorFlowLiteSelectTfOps or Flex linker flags. Android retains its
+existing delegate setup.
+
+## Model export
+
+```sh
+python tool/export_wav2vec_tflite.py final_models/best_wav2vec.pt
+```
+
+The only input is a PyTorch state_dict checkpoint for Wav2Vec2-base with three
+classes. The architecture uses `facebook/wav2vec2-base` (downloaded or cached),
+not architecture inferred from arbitrary weights. Use TensorFlow 2.17.x and
+compatible PyTorch, Transformers, ONNX and onnx2tf dependencies.
+
+The script writes `model.tflite` and `model.report.json` in the current working
+directory. It uses dynamic range quantization with INT8 weights and float32
+input/output `[1, 80000]` / `[1, 3]`. Runtime kernels may dynamically quantize
+activations; this is not calibrated full-integer quantization. No audio or label
+files are required, and synthetic inputs are not used for calibration.
+
+The script checks built-in operators, tensor shapes/types, INT8 weights attached
+to compute operations, file size reduction and TensorFlow 2.17 inference. It
+compares float32 conversion against the PyTorch GELU approximation and reports
+synthetic differences against a reference using the base training configuration.
+These checks do not measure accuracy on real audio; the checkpoint alone cannot
+provide the original training configuration, calibration data or labeled tests.
+The report marks real accuracy as unvalidated. The existing output model is
+preserved if validation fails. Copy a successful `model.tflite` into
+`assets/models/model.tflite` before building the Codemagic IPA.
+
+Check that training class indices match `assets/labels/labels.txt`:
+0 = no_violence, 1 = physical_violence, 2 = verbal_violence.
