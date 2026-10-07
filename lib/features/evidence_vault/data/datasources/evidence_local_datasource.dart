@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/errors/failures.dart';
 import '../models/evidence_record_model.dart';
+import 'background_evidence_journal.dart';
 
 abstract class EvidenceLocalDataSource {
   Future<void> insertRecord(EvidenceRecordModel record);
@@ -13,9 +14,17 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
   Future<Box<EvidenceRecordModel>> _openBox() async {
     try {
       if (Hive.isBoxOpen(HiveConstants.encryptedEvidenceBox)) {
-        return Hive.box<EvidenceRecordModel>(HiveConstants.encryptedEvidenceBox);
+        final box = Hive.box<EvidenceRecordModel>(
+          HiveConstants.encryptedEvidenceBox,
+        );
+        await BackgroundEvidenceJournal.importInto(box);
+        return box;
       }
-      return await Hive.openBox<EvidenceRecordModel>(HiveConstants.encryptedEvidenceBox);
+      final box = await Hive.openBox<EvidenceRecordModel>(
+        HiveConstants.encryptedEvidenceBox,
+      );
+      await BackgroundEvidenceJournal.importInto(box);
+      return box;
     } catch (e) {
       throw DatabaseFailure('Error: $e');
     }

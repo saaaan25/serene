@@ -30,6 +30,8 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
     required String predictionLabel,
     required double confidenceScore,
     required Map<String, double> gpsCoordinates,
+    String? evidenceId,
+    DateTime? startedAt,
   }) async {
     final secretKey = await keyStorage.getOrCreateMasterKey();
 
@@ -42,8 +44,8 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
     final integrityHash = digest.toString();
 
     final recordModel = EvidenceRecordModel(
-      id: _uuid.v4(),
-      timestamp: DateTime.now().toUtc(),
+      id: evidenceId ?? _uuid.v4(),
+      timestamp: (startedAt ?? DateTime.now()).toUtc(),
       predictionLabel: predictionLabel,
       confidenceScore: confidenceScore,
       gpsCoordinates: gpsCoordinates,
@@ -65,11 +67,13 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
 
   @override
   Future<Uint8List> getDecryptedAudioBytes(EvidenceRecord record) async {
-    final currentDigest =
-        crypto_hash.sha256.convert(record.encryptedAudioBlob).toString();
+    final currentDigest = crypto_hash.sha256
+        .convert(record.encryptedAudioBlob)
+        .toString();
     if (currentDigest != record.integrityHash) {
       throw const CryptoFailure(
-          'The integrity of the encrypted audio blob has been compromised');
+        'The integrity of the encrypted audio blob has been compromised',
+      );
     }
 
     final secretKey = await keyStorage.getOrCreateMasterKey();
@@ -97,9 +101,6 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
       totalBytes += model.encryptedAudioBlob.length;
     }
 
-    return VaultStats(
-      totalCount: models.length,
-      totalBytes: totalBytes,
-    );
+    return VaultStats(totalCount: models.length, totalBytes: totalBytes);
   }
 }

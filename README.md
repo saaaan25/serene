@@ -12,8 +12,31 @@ incident is saved; an evidence record has no coordinates if location is
 unavailable or permission is denied. If microphone or notification access is
 denied, enable it in the device's app settings and reopen Serene.
 
-The monitoring controller currently pauses audio monitoring when the app leaves
-the foreground on both platforms. iOS audio background mode is not configured.
+Monitoring begins after microphone permission has been granted. Android runs
+capture, inference and encrypted checkpoints in the microphone foreground
+service with a persistent notification and a Stop button. Removing the UI from
+recent apps does not intentionally stop that service. iOS keeps an active audio
+session while backgrounded/locked, with the audio background mode enabled.
+Recording pauses/resumes around supported audio interruptions. Forced stops,
+revoked permissions and operating-system termination can still stop monitoring;
+it is not an always-on guarantee and does not restart the microphone at boot.
+
+The model evaluates overlapping five-second audio windows. A positive detection
+starts one incident including that trigger window. Only new PCM samples are
+appended, so overlaps are not duplicated. Three seconds of negative decisions
+close the incident, allowing brief fluctuations. The first window and every
+15 seconds of additional audio are encrypted as checkpoints with the same ID;
+the final checkpoint replaces that record, instead of creating isolated clips.
+Manual stop persists an open incident. Abrupt termination can lose audio since
+the most recent successful checkpoint. Slow devices adapt inference frequency
+while retaining the audio; a bounded processing queue reports overload rather
+than silently dropping audio.
+
+Android writes only encrypted evidence to an atomic background journal. The UI
+imports it into Hive when available or after reopening; the service never opens
+Hive concurrently with the UI engine. GPS is optional and acquired once per
+incident; the background worker does not show location permission dialogs.
+The highest-confidence violence prediction supplies the incident label/score.
 
 For iOS builds (including Codemagic), run `flutter pub get`, then
 `ruby tool/align_tflite_ios_podspec.rb` from the repository root, followed by
@@ -24,8 +47,8 @@ iOS builds cannot be produced on Windows.
 
 The current bundled model contains built-in operators, including FULLY_CONNECTED
 version 12; it does not contain FlexErf. iOS therefore uses the standard runtime
-without TensorFlowLiteSelectTfOps or Flex linker flags. Android retains its
-existing delegate setup.
+without TensorFlowLiteSelectTfOps or Flex linker flags. Android also loads this model without an Activity-owned Flex delegate,
+so inference works from the service engine.
 
 ## Model export
 

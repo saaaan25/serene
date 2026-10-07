@@ -6,12 +6,16 @@ class SaveEncryptedEvidenceParams {
   final String predictionLabel;
   final double confidenceScore;
   final Map<String, double> gpsCoordinates;
+  final String? evidenceId;
+  final DateTime? startedAt;
 
   SaveEncryptedEvidenceParams({
     required this.rawAudioBytes,
     required this.predictionLabel,
     required this.confidenceScore,
     required this.gpsCoordinates,
+    this.evidenceId,
+    this.startedAt,
   });
 }
 
@@ -26,6 +30,8 @@ class SaveEncryptedEvidenceUseCase {
       predictionLabel: params.predictionLabel,
       confidenceScore: params.confidenceScore,
       gpsCoordinates: params.gpsCoordinates,
+      evidenceId: params.evidenceId,
+      startedAt: params.startedAt,
     );
   }
 }

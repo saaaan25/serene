@@ -15,6 +15,7 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
   StreamSubscription<Uint8List>? _micSubscription;
   final List<int> _rawPcmAccumulator = [];
   int _samplesSinceLastWindow = 0;
+  int _totalSamples = 0;
 
   MonitoringRepositoryImpl({
     required this.audioStreamDataSource,
@@ -33,6 +34,7 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
     _bufferManager.purge();
     _rawPcmAccumulator.clear();
     _samplesSinceLastWindow = 0;
+    _totalSamples = 0;
     _windowStreamController = StreamController<AudioWindow>.broadcast();
 
     try {
@@ -41,10 +43,12 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
         (pcmChunk) {
           _rawPcmAccumulator.addAll(pcmChunk);
 
-          final normalizedSamples =
-              SignalNormalizer.pcm16ToNormalizedFloat32(pcmChunk);
+          final normalizedSamples = SignalNormalizer.pcm16ToNormalizedFloat32(
+            pcmChunk,
+          );
           _bufferManager.appendSamples(normalizedSamples);
           _samplesSinceLastWindow += normalizedSamples.length;
+          _totalSamples += normalizedSamples.length;
 
           final maxRawBytes = AppConstants.expectedSampleCount * 2;
           if (_rawPcmAccumulator.length > maxRawBytes) {
@@ -62,10 +66,10 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
                 normalizedSamples: _bufferManager.getOrderedSnapshot(),
                 rawPcmBytes: Uint8List.fromList(_rawPcmAccumulator),
                 timestamp: DateTime.now(),
+                endSampleIndex: _totalSamples,
               ),
             );
           }
-
         },
         onError: (Object error, StackTrace stackTrace) {
           _windowStreamController?.addError(error, stackTrace);
@@ -86,6 +90,16 @@ class MonitoringRepositoryImpl implements MonitoringRepository {
     await _micSubscription?.cancel();
     _micSubscription = null;
     await audioStreamDataSource.stopStream();
+    if (_bufferManager.isFull && _samplesSinceLastWindow > 0) {
+      _windowStreamController?.add(
+        AudioWindow(
+          normalizedSamples: _bufferManager.getOrderedSnapshot(),
+          rawPcmBytes: Uint8List.fromList(_rawPcmAccumulator),
+          timestamp: DateTime.now(),
+          endSampleIndex: _totalSamples,
+        ),
+      );
+    }
     _bufferManager.purge();
     _rawPcmAccumulator.clear();
     _samplesSinceLastWindow = 0;

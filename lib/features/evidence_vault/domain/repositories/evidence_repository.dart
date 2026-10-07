@@ -8,6 +8,8 @@ abstract class EvidenceRepository {
     required String predictionLabel,
     required double confidenceScore,
     required Map<String, double> gpsCoordinates,
+    String? evidenceId,
+    DateTime? startedAt,
   });
 
   Future<List<EvidenceRecord>> getAllEvidenceRecords();

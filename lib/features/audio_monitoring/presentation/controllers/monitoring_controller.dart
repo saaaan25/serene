@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,7 +9,7 @@ import '../../domain/entities/audio_window.dart';
 import '../../domain/entities/inference_result.dart';
 import '../../domain/usecases/process_audio_stream_usecase.dart';
 import '../isolates/audio_processing_isolate.dart';
-import 'incident_capture_gate.dart';
+import 'incident_recording.dart';
 
 enum MonitoringStatus { idle, initializing, active, paused, error }
 
@@ -16,14 +17,27 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   final ProcessAudioStreamUseCase _processAudioUseCase;
   final SaveEncryptedEvidenceUseCase _saveEvidenceUseCase;
   final MonitoringForegroundService _foregroundService;
-  final IncidentCaptureGate _incidentCaptureGate;
+  final bool runInService;
+  final AudioInferenceIsolate Function() _inferenceFactory;
+  final Future<Map<String, double>> Function()? _coordinatesProvider;
+  IncidentRecording? _incident;
+  Future<void> _windowWork = Future.value();
+  int _queuedWindows = 0;
+  StreamSubscription<Map<String, dynamic>>? _serviceSubscription;
+  bool _monitoringRequested = false;
+  bool _disposed = false;
+  Timer? _retryTimer;
+  Future<void>? _resourceStop;
+  bool _stoppingResources = false;
+  InferenceResult? _latestInference;
+  DateTime? _lastInferenceAt;
+  Duration _inferenceInterval = const Duration(seconds: 1);
 
   AudioInferenceIsolate? _inferenceIsolate;
   StreamSubscription<AudioWindow>? _audioSubscription;
   MonitoringStatus _status = MonitoringStatus.idle;
   String? _errorMessage;
   String _lastDetectedClass = 'None';
-  bool _isProcessingWindow = false;
   bool _microphoneStreamStarted = false;
   bool _foregroundServiceStarted = false;
   int _startGeneration = 0;
@@ -34,12 +48,22 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     required ProcessAudioStreamUseCase processAudioUseCase,
     required SaveEncryptedEvidenceUseCase saveEvidenceUseCase,
     MonitoringForegroundService? foregroundService,
-    IncidentCaptureGate? incidentCaptureGate,
+    this.runInService = false,
+    AudioInferenceIsolate Function()? inferenceFactory,
+    Future<Map<String, double>> Function()? coordinatesProvider,
   }) : _processAudioUseCase = processAudioUseCase,
        _saveEvidenceUseCase = saveEvidenceUseCase,
        _foregroundService = foregroundService ?? MonitoringForegroundService(),
-       _incidentCaptureGate = incidentCaptureGate ?? IncidentCaptureGate() {
-    WidgetsBinding.instance.addObserver(this);
+       _inferenceFactory = inferenceFactory ?? AudioInferenceIsolate.new,
+       _coordinatesProvider = coordinatesProvider {
+    if (!runInService) WidgetsBinding.instance.addObserver(this);
+    if (_usesAndroidService) {
+      _serviceSubscription = _foregroundService.events.listen(_onServiceEvent);
+    }
+  }
+
+  void _notify() {
+    if (!_disposed) super.notifyListeners();
   }
 
   MonitoringStatus get status => _status;
@@ -47,19 +71,51 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   String get lastDetectedClass => _lastDetectedClass;
   bool get isMonitoring => _status == MonitoringStatus.active;
 
+  bool get _usesAndroidService => Platform.isAndroid && !runInService;
+
+  void _onServiceEvent(Map<String, dynamic> event) {
+    if (_disposed) return;
+    final status = event['status'] as String?;
+    if (status != null) {
+      _status = MonitoringStatus.values.firstWhere(
+        (s) => s.name == status,
+        orElse: () => MonitoringStatus.error,
+      );
+      _errorMessage = event['error'] as String?;
+      if (_status == MonitoringStatus.paused) _monitoringRequested = false;
+      _lastDetectedClass = event['label'] as String? ?? _lastDetectedClass;
+      _notify();
+    }
+    if (event['evidenceSaved'] == true) {
+      unawaited(_importBackgroundEvidence());
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-        unawaited(_stopAfterLeavingForeground());
-      case AppLifecycleState.resumed:
-        if (_status == MonitoringStatus.paused) {
-          unawaited(startMonitoring());
-        }
-      case AppLifecycleState.inactive:
-        break;
+    // Keep an established microphone session alive when hidden/locked.
+    // A new Android microphone service must still start from a visible app.
+    if ((state == AppLifecycleState.hidden ||
+            state == AppLifecycleState.paused) &&
+        _status == MonitoringStatus.initializing) {
+      unawaited(_stopAfterLeavingForeground());
+    } else if (state == AppLifecycleState.resumed) {
+      if (_usesAndroidService && _status == MonitoringStatus.active) {
+        _foregroundService.requestStatus();
+      } else if (_monitoringRequested &&
+          (_status == MonitoringStatus.paused ||
+              _status == MonitoringStatus.error)) {
+        unawaited(startMonitoring());
+      }
+      unawaited(_importBackgroundEvidence());
+    }
+  }
+
+  Future<void> _importBackgroundEvidence() async {
+    try {
+      await _saveEvidenceUseCase.repository.getVaultStats();
+    } catch (error) {
+      debugPrint('Could not refresh evidence: $error');
     }
   }
 
@@ -70,7 +126,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     ++_startGeneration;
     _status = MonitoringStatus.paused;
     _errorMessage = null;
-    notifyListeners();
+    _notify();
 
     final stopFuture = () async {
       try {
@@ -82,7 +138,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         _status = MonitoringStatus.error;
         _errorMessage = 'Could not release audio resources: $error';
       }
-      notifyListeners();
+      _notify();
     }();
     _lifecycleStopFuture = stopFuture;
     try {
@@ -95,6 +151,9 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> startMonitoring() async {
+    if (_disposed) return;
+    _monitoringRequested = true;
+    _retryTimer?.cancel();
     final lifecycleStop = _lifecycleStopFuture;
     if (lifecycleStop != null) await lifecycleStop;
 
@@ -106,8 +165,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     final generation = ++_startGeneration;
     _status = MonitoringStatus.initializing;
     _errorMessage = null;
-    _incidentCaptureGate.reset();
-    notifyListeners();
+    _notify();
 
     final startFuture = _startMonitoring(generation);
     _startFuture = startFuture;
@@ -120,7 +178,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _startMonitoring(int generation) async {
     try {
-      await _stopResources(forceForegroundServiceStop: true);
+      await _stopResources(forceForegroundServiceStop: !_usesAndroidService);
       if (generation != _startGeneration) return;
 
       debugPrint('Checking microphone permission for monitoring.');
@@ -128,37 +186,47 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         throw StateError('Microphone permission was not granted.');
       }
       if (generation != _startGeneration) return;
+      if (_usesAndroidService) {
+        await _foregroundService.start();
+        _foregroundServiceStarted = true;
+        if (generation != _startGeneration) {
+          await _foregroundService.stop();
+          _foregroundServiceStarted = false;
+          return;
+        }
+        _status = MonitoringStatus.active;
+        _notify();
+        return;
+      }
       debugPrint('Initializing TensorFlow Lite inference worker.');
 
-      _inferenceIsolate = AudioInferenceIsolate();
+      _inferenceIsolate = _inferenceFactory();
       await _inferenceIsolate!.initialize();
       if (generation != _startGeneration) return;
       debugPrint('TensorFlow Lite inference worker is ready.');
-
-      await _foregroundService.start();
-      _foregroundServiceStarted = true;
-      if (generation != _startGeneration) return;
-      debugPrint('Android foreground monitoring service is running.');
 
       final audioStream = await _processAudioUseCase.getAudioStream();
       _microphoneStreamStarted = true;
       if (generation != _startGeneration) return;
       debugPrint('Microphone audio stream is running.');
       _audioSubscription = audioStream.listen(
-        _processAudioWindow,
+        _enqueueWindow,
         onError: (Object error, StackTrace stackTrace) {
-          _failMonitoring('Microphone stream failed: $error');
+          _failMonitoring('Microphone stream failed: $error', retry: true);
         },
         onDone: () {
-          if (_status == MonitoringStatus.active) {
-            _failMonitoring('Microphone stream ended unexpectedly.');
+          if (_status == MonitoringStatus.active && !_stoppingResources) {
+            _failMonitoring(
+              'Microphone stream ended unexpectedly.',
+              retry: true,
+            );
           }
         },
       );
 
       if (generation != _startGeneration) return;
       _status = MonitoringStatus.active;
-      notifyListeners();
+      _notify();
     } catch (error) {
       if (generation != _startGeneration) {
         try {
@@ -179,12 +247,18 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       _status = MonitoringStatus.error;
       _errorMessage = startupError.toString();
       debugPrint('Audio monitoring startup failed: $startupError');
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> pauseMonitoring() async {
-    if (_status != MonitoringStatus.active) return;
+    _monitoringRequested = false;
+    _retryTimer?.cancel();
+    ++_startGeneration;
+    if (_status != MonitoringStatus.active &&
+        _status != MonitoringStatus.error) {
+      return;
+    }
 
     try {
       await _stopResources();
@@ -194,42 +268,87 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       _status = MonitoringStatus.error;
       _errorMessage = 'No se pudo detener el monitoreo: $error';
     }
-    notifyListeners();
+    _notify();
+  }
+
+  void _enqueueWindow(AudioWindow window) {
+    if (_queuedWindows >= 30) {
+      _failMonitoring(
+        'Audio inference cannot keep up with recording',
+        retry: true,
+      );
+      return;
+    }
+    _queuedWindows++;
+    _windowWork = _windowWork
+        .then((_) => _processAudioWindow(window))
+        .whenComplete(() {
+          _queuedWindows--;
+        });
   }
 
   Future<void> _processAudioWindow(AudioWindow window) async {
-    if (_isProcessingWindow) return;
-    _isProcessingWindow = true;
     try {
-      if (!_containsSignal(window.normalizedSamples)) {
-        debugPrint(
-          'Ignoring an all-zero audio window; microphone input may be silent.',
-        );
-        return;
-      }
-      final result = await _inferenceIsolate!.predict(window.normalizedSamples);
-      if (_status == MonitoringStatus.active && result.isViolenceDetected) {
-        if (!_incidentCaptureGate.canCaptureAt(window.timestamp)) {
-          debugPrint(
-            'Skipping repeated detection inside the '
-            '${_incidentCaptureGate.minimumInterval.inSeconds}-second '
-            'evidence interval: ${result.label} '
-            '(${(result.confidence * 100).toStringAsFixed(1)}%).',
+      InferenceResult? result;
+      if (_containsSignal(window.normalizedSamples)) {
+        if (_lastInferenceAt == null ||
+            window.timestamp.difference(_lastInferenceAt!) >=
+                _inferenceInterval) {
+          final timer = Stopwatch()..start();
+          _latestInference = await _inferenceIsolate!.predict(
+            window.normalizedSamples,
           );
-          return;
+          timer.stop();
+          _lastInferenceAt = window.timestamp;
+          // Slow phones classify less often, but retain every PCM sample.
+          final milliseconds = (timer.elapsedMilliseconds * 1.25).ceil();
+          _inferenceInterval = Duration(
+            milliseconds: milliseconds < 1000 ? 1000 : milliseconds,
+          );
         }
-        await _handleIncidentDetected(window, result);
-        _incidentCaptureGate.markCapturedAt(window.timestamp);
-        debugPrint(
-          'Saved ${result.label} evidence at '
-          '${(result.confidence * 100).toStringAsFixed(1)}% confidence.',
-        );
+        result = _latestInference;
+      } else {
+        _latestInference = null;
+        _lastInferenceAt = null;
+      }
+      var incident = _incident;
+      if (incident == null) {
+        if (!(result?.isViolenceDetected ?? false)) return;
+        incident = IncidentRecording(window, result!);
+        _incident = incident;
+        _lastDetectedClass = result.label;
+        if (!_disposed) _notify();
+        // First checkpoint persists the trigger window immediately.
+        await _saveIncident(incident);
+      } else {
+        incident.append(window, result);
+        if (incident.shouldClose) {
+          await _saveIncident(incident);
+          _incident = null;
+        } else if (incident.checkpointDue) {
+          await _saveIncident(incident);
+        }
       }
     } catch (error) {
-      _failMonitoring('Audio inference failed: $error');
-    } finally {
-      _isProcessingWindow = false;
+      _failMonitoring('Audio inference or evidence persistence failed: $error');
     }
+  }
+
+  Future<void> _saveIncident(IncidentRecording incident) async {
+    final coordinates = incident.coordinates ??=
+        await _captureCurrentCoordinates();
+    await _saveEvidenceUseCase(
+      SaveEncryptedEvidenceParams(
+        rawAudioBytes: incident.snapshot(),
+        predictionLabel: incident.label,
+        confidenceScore: incident.confidence,
+        gpsCoordinates: coordinates,
+        evidenceId: incident.id,
+        startedAt: incident.startedAt,
+      ),
+    );
+    incident.markCheckpoint();
+    debugPrint('Saved incident ${incident.id}: ${incident.length} PCM bytes');
   }
 
   bool _containsSignal(Float32List samples) {
@@ -239,25 +358,8 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     return false;
   }
 
-  Future<void> _handleIncidentDetected(
-    AudioWindow window,
-    InferenceResult result,
-  ) async {
-    _lastDetectedClass = result.label;
-    notifyListeners();
-
-    final coordinates = await _captureCurrentCoordinates();
-    await _saveEvidenceUseCase(
-      SaveEncryptedEvidenceParams(
-        rawAudioBytes: window.rawPcmBytes,
-        predictionLabel: result.label,
-        confidenceScore: result.confidence,
-        gpsCoordinates: coordinates,
-      ),
-    );
-  }
-
   Future<Map<String, double>> _captureCurrentCoordinates() async {
+    if (_coordinatesProvider != null) return _coordinatesProvider();
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         debugPrint('Location unavailable: device location services are off.');
@@ -266,7 +368,12 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
 
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        // Background recording must not open a permission dialog.
+        if (!runInService &&
+            WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed) {
+          permission = await Geolocator.requestPermission();
+        }
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -285,21 +392,52 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void _failMonitoring(String message) {
+  void _failMonitoring(String message, {bool retry = false}) {
     if (_status == MonitoringStatus.error) return;
     _status = MonitoringStatus.error;
     _errorMessage = message;
     debugPrint(message);
-    notifyListeners();
+    if (!_disposed) _notify();
     unawaited(
-      _stopResources().catchError((Object error) {
-        debugPrint('Error stopping audio monitoring: $error');
-      }),
+      _stopResources()
+          .catchError((Object error) {
+            debugPrint('Error stopping audio monitoring: $error');
+          })
+          .then((_) {
+            if (retry && _monitoringRequested && !_disposed) {
+              _retryTimer = Timer(
+                const Duration(seconds: 3),
+                () => unawaited(startMonitoring()),
+              );
+            }
+          }),
     );
   }
 
-  Future<void> _stopResources({bool forceForegroundServiceStop = false}) async {
+  Future<void> _stopResources({bool forceForegroundServiceStop = false}) {
+    return _resourceStop ??=
+        _releaseResources(
+          forceForegroundServiceStop: forceForegroundServiceStop,
+        ).whenComplete(() {
+          _resourceStop = null;
+          _stoppingResources = false;
+        });
+  }
+
+  Future<void> _releaseResources({
+    bool forceForegroundServiceStop = false,
+  }) async {
+    _stoppingResources = true;
     final errors = <Object>[];
+    if (_microphoneStreamStarted) {
+      try {
+        await _processAudioUseCase.stop();
+        _microphoneStreamStarted = false;
+      } catch (error) {
+        errors.add(error);
+      }
+    }
+
     final subscription = _audioSubscription;
     if (subscription != null) {
       try {
@@ -310,10 +448,14 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    if (_microphoneStreamStarted) {
+    // Drain classified windows before disposing the interpreter; persist the
+    // same incident on graceful stop instead of losing its last samples.
+    await _windowWork;
+    final incident = _incident;
+    if (incident != null) {
       try {
-        await _processAudioUseCase.stop();
-        _microphoneStreamStarted = false;
+        await _saveIncident(incident);
+        _incident = null;
       } catch (error) {
         errors.add(error);
       }
@@ -324,12 +466,15 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await inferenceIsolate.dispose();
         _inferenceIsolate = null;
+        _latestInference = null;
+        _lastInferenceAt = null;
       } catch (error) {
         errors.add(error);
       }
     }
 
-    if (_foregroundServiceStarted || forceForegroundServiceStop) {
+    if (!runInService &&
+        (_foregroundServiceStarted || forceForegroundServiceStop)) {
       try {
         await _foregroundService.stop();
         _foregroundServiceStarted = false;
@@ -345,8 +490,17 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    if (!runInService) WidgetsBinding.instance.removeObserver(this);
+    _disposed = true;
+    _retryTimer?.cancel();
+    unawaited(_serviceSubscription?.cancel());
     ++_startGeneration;
+    // UI engine can go away while the Android service continues recording.
+    if (_usesAndroidService) {
+      unawaited(_foregroundService.disconnect());
+      super.dispose();
+      return;
+    }
     final startFuture = _startFuture;
     unawaited(() async {
       try {

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
@@ -7,17 +6,12 @@ import '../../data/datasources/tflite_inference_engine.dart';
 import '../../domain/entities/inference_result.dart';
 
 class AudioInferenceIsolate {
-  static const _flexDelegateChannel = MethodChannel(
-    'com.example.serene/tflite_flex',
-  );
-
   Isolate? _isolate;
   ReceivePort? _receivePort;
   SendPort? _sendPort;
   final Completer<void> _ready = Completer<void>();
   final Completer<void> _disposed = Completer<void>();
   final Map<int, Completer<InferenceResult>> _pending = {};
-  int? _flexDelegateAddress;
   int _nextRequestId = 0;
 
   Future<void> initialize() async {
@@ -28,17 +22,6 @@ class AudioInferenceIsolate {
     );
     final labelsRaw = await rootBundle.loadString('assets/labels/labels.txt');
     try {
-      if (Platform.isAndroid) {
-        _flexDelegateAddress = await _flexDelegateChannel.invokeMethod<int>(
-          'createFlexDelegate',
-        );
-        if (_flexDelegateAddress == null || _flexDelegateAddress == 0) {
-          throw StateError(
-            'Android did not create the TensorFlow Flex delegate',
-          );
-        }
-      }
-
       _receivePort = ReceivePort();
       _receivePort!.listen(_handleMessage);
       _isolate = await Isolate.spawn(
@@ -47,7 +30,7 @@ class AudioInferenceIsolate {
           mainSendPort: _receivePort!.sendPort,
           modelBytes: TransferableTypedData.fromList([modelBytes]),
           labelsRaw: labelsRaw,
-          flexDelegateAddress: _flexDelegateAddress,
+          flexDelegateAddress: null,
         ),
       );
       await _ready.future.timeout(const Duration(seconds: 30));
@@ -132,11 +115,6 @@ class AudioInferenceIsolate {
     _receivePort = null;
     _sendPort = null;
     _isolate = null;
-
-    if (_flexDelegateAddress != null) {
-      await _flexDelegateChannel.invokeMethod<void>('disposeFlexDelegate');
-      _flexDelegateAddress = null;
-    }
   }
 }
 

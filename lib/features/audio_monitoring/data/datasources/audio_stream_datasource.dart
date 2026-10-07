@@ -15,6 +15,10 @@ class AudioStreamDataSourceImpl implements AudioStreamDataSource {
     encoder: AudioEncoder.pcm16bits,
     sampleRate: AppConstants.sampleRate,
     numChannels: AppConstants.audioChannels,
+    audioInterruption: AudioInterruptionMode.pauseResume,
+    iosConfig: IosRecordConfig(
+      categoryOptions: [IosAudioCategoryOption.mixWithOthers],
+    ),
   );
 
   final AudioRecorder Function() _recorderFactory;

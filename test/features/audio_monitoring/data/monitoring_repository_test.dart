@@ -21,6 +21,29 @@ class FakeAudioStreamDataSource implements AudioStreamDataSource {
 }
 
 void main() {
+  test(
+    'graceful stop emits the remaining partial second for incident persistence',
+    () async {
+      final source = FakeAudioStreamDataSource();
+      final repository = MonitoringRepositoryImpl(
+        audioStreamDataSource: source,
+      );
+      final windows = <AudioWindow>[];
+      final stream = await repository.startMicrophoneStream();
+      final subscription = stream.listen(windows.add);
+      source.controller.add(Uint8List(160000));
+      await Future<void>.delayed(Duration.zero);
+      source.controller.add(Uint8List(16000));
+      await Future<void>.delayed(Duration.zero);
+      await repository.stopMicrophoneStream();
+      expect(windows, hasLength(2));
+      expect(windows.first.endSampleIndex, 80000);
+      expect(windows.last.endSampleIndex, 88000);
+      expect(windows.last.rawPcmBytes.length, 160000);
+      await subscription.cancel();
+    },
+  );
+
   test('only emits full five-second windows and samples each second', () async {
     final source = FakeAudioStreamDataSource();
     final repository = MonitoringRepositoryImpl(audioStreamDataSource: source);

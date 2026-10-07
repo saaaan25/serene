@@ -95,26 +95,16 @@ void main() {
       },
     );
 
-    test('resuming after leaving the foreground retries monitoring', () async {
-      final startupFailed = Completer<void>();
-      when(
-        () => mockProcessUseCase.hasMicrophonePermission(),
-      ).thenAnswer((_) async => false);
-      controller.addListener(() {
-        if (controller.status == MonitoringStatus.error &&
-            !startupFailed.isCompleted) {
-          startupFailed.complete();
-        }
-      });
-
-      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
-      await Future<void>.delayed(Duration.zero);
-      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
-      await startupFailed.future.timeout(const Duration(seconds: 1));
-
-      expect(controller.status, MonitoringStatus.error);
-      verify(() => mockProcessUseCase.hasMicrophonePermission()).called(1);
-    });
+    test(
+      'background/resume does not start an idle or explicitly paused monitor',
+      () async {
+        controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+        controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await Future<void>.delayed(Duration.zero);
+        expect(controller.status, MonitoringStatus.idle);
+        verifyNever(() => mockProcessUseCase.hasMicrophonePermission());
+      },
+    );
   });
 
   group('Evidence Persistence', () {

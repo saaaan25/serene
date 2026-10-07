@@ -11,6 +11,10 @@
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Se requiere acceso al micrófono para el monitoreo continuo y detección en tiempo real.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
