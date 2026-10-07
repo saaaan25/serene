@@ -13,14 +13,25 @@ workflows:
           flutter config --no-enable-swift-package-manager
       - name: Instalar dependencias Flutter
         script: |
-          flutter packages pub get
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter pub get
       - name: Alinear versiones nativas de TensorFlow Lite
         script: |
+          set -e
+          cd "$CM_BUILD_DIR"
           ruby tool/align_tflite_ios_podspec.rb
+      - name: Generar configuracion Flutter para iOS
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter build ios --config-only --release --no-codesign --no-pub
+          test -s ios/Flutter/Generated.xcconfig
       - name: Instalar dependencias nativas de iOS
         script: |
           set -e
-          cd ios
+          cd "$CM_BUILD_DIR/ios"
+          test -s Flutter/Generated.xcconfig
           pod update TensorFlowLiteSwift TensorFlowLiteC --repo-update
           cd ..
       - name: Verificar pods de TensorFlow Lite
