@@ -3,6 +3,7 @@ class VaultItem {
   final String name;
   final DateTime date;
   final bool encrypted;
+  final bool legacy;
   final String type; // 'audio' or 'video'
 
   VaultItem({
@@ -10,6 +11,7 @@ class VaultItem {
     required this.name,
     required this.date,
     required this.encrypted,
+    this.legacy = false,
     required this.type,
   });
 }

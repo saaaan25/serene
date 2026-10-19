@@ -23,11 +23,13 @@ class CipherManager {
   Future<EncryptedPayload> encryptInMemory({
     required Uint8List rawAudioBytes,
     required SecretKey secretKey,
+    List<int> aad = const [],
   }) async {
     try {
       final secretBox = await _algorithm.encrypt(
         rawAudioBytes,
         secretKey: secretKey,
+        aad: aad,
       );
 
       return EncryptedPayload(
@@ -46,6 +48,7 @@ class CipherManager {
     required Uint8List ivBytes,
     required Uint8List authTag,
     required SecretKey secretKey,
+    List<int> aad = const [],
   }) async {
     try {
       final secretBox = SecretBox(
@@ -57,6 +60,7 @@ class CipherManager {
       final decryptedBytes = await _algorithm.decrypt(
         secretBox,
         secretKey: secretKey,
+        aad: aad,
       );
 
       return Uint8List.fromList(decryptedBytes);

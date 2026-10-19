@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 import 'package:serene/core/constants/hive_constants.dart';
 import 'package:serene/features/evidence_vault/data/datasources/evidence_local_datasource.dart';
 import 'package:serene/features/evidence_vault/data/models/evidence_record_model.dart';
+import '../../../support/memory_evidence_keys.dart';
 
 void main() {
   late EvidenceLocalDataSourceImpl dataSource;
@@ -16,7 +17,10 @@ void main() {
     if (!Hive.isAdapterRegistered(HiveConstants.evidenceRecordTypeId)) {
       Hive.registerAdapter(EvidenceRecordModelAdapter());
     }
-    dataSource = EvidenceLocalDataSourceImpl();
+    dataSource = EvidenceLocalDataSourceImpl(
+      storageGuard: ampleStorage(),
+      keyStorage: MemoryEvidenceKeys(),
+    );
   });
 
   tearDown(() async {

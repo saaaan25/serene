@@ -6,20 +6,26 @@ import '../errors/failures.dart';
 class SecureKeyStorage {
   final FlutterSecureStorage _secureStorage;
   static const String _masterKeyAlias = 'MASTER_KEY_256';
+  static Future<void> _keyWork = Future.value();
 
   SecureKeyStorage({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(
-                encryptedSharedPreferences: true,
-              ),
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock,
-              ),
-            );
+    : _secureStorage =
+          secureStorage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+          );
 
   /// Get or create a master key for AES encryption
-  Future<SecretKey> getOrCreateMasterKey() async {
+  Future<SecretKey> getOrCreateMasterKey() {
+    final task = _keyWork.then((_) => _getOrCreateMasterKey());
+    _keyWork = task.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return task;
+  }
+
+  Future<SecretKey> _getOrCreateMasterKey() async {
     try {
       final existingKeyHex = await _secureStorage.read(key: _masterKeyAlias);
 
@@ -44,7 +50,14 @@ class SecureKeyStorage {
     }
   }
 
-  /// Clean the master key in case of system reset
+  /// Protected audit head and recovery marker, stored separately from Hive.
+  Future<String?> readAuditState() =>
+      _secureStorage.read(key: 'EVIDENCE_AUDIT_STATE_V2');
+
+  Future<void> writeAuditState(String state) =>
+      _secureStorage.write(key: 'EVIDENCE_AUDIT_STATE_V2', value: state);
+
+  /// Clean the master key in case of system reset.
   Future<void> clearMasterKey() async {
     try {
       await _secureStorage.delete(key: _masterKeyAlias);

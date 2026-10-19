@@ -21,3 +21,7 @@ class AudioProcessingFailure extends Failure {
 class DatabaseFailure extends Failure {
   const DatabaseFailure(super.message);
 }
+
+class StorageCapacityFailure extends Failure {
+  const StorageCapacityFailure(super.message);
+}

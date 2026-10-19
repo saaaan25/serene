@@ -1,6 +1,8 @@
 class AppTranslations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'es': {
+      'vault_legacy_record': 'Registro antiguo: sin metadatos autenticados',
+      'vault_integrity_error': 'No se pudo verificar la integridad de las grabaciones. Vuelve a abrir la bóveda para reintentar.',
       // settingsScreen texts
       'settings_title': 'PREFERENCIAS',
       'vault_password': 'Contraseña del Baúl',
@@ -30,7 +32,7 @@ class AppTranslations {
       'vault_sort_by_date': 'ORDENAR POR FECHA',
       'vault_delete_title': '¿Eliminar Grabación?',
       'vault_delete_msg':
-          'Esta acción es irreversible y el archivo se borrará permanentemente de la memoria segura.',
+          'Se eliminará esta grabación y todas sus versiones de la bóveda. Se conservará el registro de eliminación. No se garantiza borrar copias internas del sistema operativo.',
       'vault_delete_success': 'Grabación eliminada correctamente',
       'vault_delete_error':
           'No se pudo eliminar la grabación. Inténtalo de nuevo.',
@@ -107,6 +109,8 @@ class AppTranslations {
       'nav_settings': 'AJUSTES',
     },
     'en': {
+      'vault_legacy_record': 'Legacy record: metadata not authenticated',
+      'vault_integrity_error': 'Recording integrity could not be verified. Reopen the vault to retry.',
       // SettingsScreen texts
       'settings_title': 'PREFERENCES',
       'vault_password': 'Vault Password',
@@ -136,7 +140,7 @@ class AppTranslations {
       'vault_sort_by_date': 'SORT BY DATE',
       'vault_delete_title': 'Delete Recording?',
       'vault_delete_msg':
-          'This action is irreversible and the asset will be permanently purged from secure memory.',
+          'This recording and all its versions will be removed from the vault. The deletion log will remain. Removal of internal operating-system copies is not guaranteed.',
       'vault_delete_success': 'Recording deleted successfully',
       'vault_delete_error': 'Could not delete the recording. Please try again.',
       'vault_delete_action': 'Delete',

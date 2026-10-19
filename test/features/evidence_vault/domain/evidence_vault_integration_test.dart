@@ -1,3 +1,4 @@
+import '../../../support/memory_evidence_keys.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -26,7 +27,7 @@ void main() {
   late EvidenceRepositoryImpl repository;
   late SaveEncryptedEvidenceUseCase saveUseCase;
   late GetDecryptedAudioStreamUseCase getUseCase;
-  
+
   // Shared in-memory map to simulate secure storage for testing purposes
   final Map<String, String> inMemorySecureStore = {};
 
@@ -38,21 +39,33 @@ void main() {
     }
 
     mockSecureStorage = MockSecureStorage();
-    when(() => mockSecureStorage.read(key: any(named: 'key')))
-        .thenAnswer((invocation) async => inMemorySecureStore[invocation.namedArguments[#key] as String]);
-    when(() => mockSecureStorage.write(key: any(named: 'key'), value: any(named: 'value')))
-        .thenAnswer((invocation) async {
-      inMemorySecureStore[invocation.namedArguments[#key] as String] = invocation.namedArguments[#value] as String;
+    when(() => mockSecureStorage.read(key: any(named: 'key'))).thenAnswer(
+      (invocation) async =>
+          inMemorySecureStore[invocation.namedArguments[#key] as String],
+    );
+    when(
+      () => mockSecureStorage.write(
+        key: any(named: 'key'),
+        value: any(named: 'value'),
+      ),
+    ).thenAnswer((invocation) async {
+      inMemorySecureStore[invocation.namedArguments[#key] as String] =
+          invocation.namedArguments[#value] as String;
     });
 
     keyStorage = SecureKeyStorage(secureStorage: mockSecureStorage);
     cipherManager = CipherManager();
-    localDataSource = EvidenceLocalDataSourceImpl();
+    localDataSource = EvidenceLocalDataSourceImpl(
+      storageGuard: ampleStorage(),
+      keyStorage: keyStorage,
+    );
 
     repository = EvidenceRepositoryImpl(
       localDataSource: localDataSource,
       cipherManager: cipherManager,
       keyStorage: keyStorage,
+      modelHashProvider: () async => 'test-model-sha256',
+      appVersion: '1.0.0+1',
     );
 
     saveUseCase = SaveEncryptedEvidenceUseCase(repository);
@@ -71,12 +84,14 @@ void main() {
     final rawPcmAudio = Uint8List.fromList(List.generate(1000, (i) => i % 256));
 
     // Save the evidence record
-    await saveUseCase(SaveEncryptedEvidenceParams(
-      rawAudioBytes: rawPcmAudio,
-      predictionLabel: 'verbal_violence',
-      confidenceScore: 0.92,
-      gpsCoordinates: {'lat': -12.05, 'lng': -77.08},
-    ));
+    await saveUseCase(
+      SaveEncryptedEvidenceParams(
+        rawAudioBytes: rawPcmAudio,
+        predictionLabel: 'verbal_violence',
+        confidenceScore: 0.92,
+        gpsCoordinates: {'lat': -12.05, 'lng': -77.08},
+      ),
+    );
 
     // Retrieve the saved record from the repository
     final records = await repository.getAllEvidenceRecords();
@@ -85,7 +100,8 @@ void main() {
 
     // Verify that the encrypted audio blob is not the same as the raw PCM audio
     expect(savedRecord.encryptedAudioBlob, isNot(equals(rawPcmAudio)));
-    expect(savedRecord.integrityHash.isNotEmpty, isTrue);
+    expect(savedRecord.hasAuthenticatedMetadata, isTrue);
+    expect(savedRecord.modelHash, 'test-model-sha256');
 
     // Decrypt the audio data and verify it matches the original raw PCM audio
     final decryptedPcm = await getUseCase(savedRecord);

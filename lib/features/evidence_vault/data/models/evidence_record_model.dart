@@ -33,6 +33,29 @@ class EvidenceRecordModel extends HiveObject {
 
   @HiveField(8)
   final String integrityHash;
+  @HiveField(9, defaultValue: '')
+  final String incidentId;
+  @HiveField(10, defaultValue: 1)
+  final int schemaVersion;
+  @HiveField(11, defaultValue: '')
+  final String appVersion;
+  @HiveField(12, defaultValue: '')
+  final String modelHash;
+  @HiveField(13, defaultValue: '')
+  final String audioFormat;
+  @HiveField(14)
+  final DateTime? savedAt;
+  @HiveField(15, defaultValue: '')
+  final String previousVersionId;
+  @HiveField(16)
+  final Uint8List? metadataCiphertext;
+  @HiveField(17)
+  final Uint8List? metadataNonce;
+  @HiveField(18)
+  final Uint8List? metadataTag;
+
+  bool get hasAuthenticatedMetadata => schemaVersion == 2;
+  String get logicalIncidentId => incidentId.isEmpty ? id : incidentId;
 
   EvidenceRecordModel({
     required this.id,
@@ -44,6 +67,16 @@ class EvidenceRecordModel extends HiveObject {
     required this.ivBytes,
     required this.authTag,
     required this.integrityHash,
+    this.incidentId = '',
+    this.schemaVersion = 1,
+    this.appVersion = '',
+    this.modelHash = '',
+    this.audioFormat = '',
+    this.savedAt,
+    this.previousVersionId = '',
+    this.metadataCiphertext,
+    this.metadataNonce,
+    this.metadataTag,
   });
 
   factory EvidenceRecordModel.fromEntity(EvidenceRecord entity) {
@@ -57,6 +90,16 @@ class EvidenceRecordModel extends HiveObject {
       ivBytes: entity.ivBytes,
       authTag: entity.authTag,
       integrityHash: entity.integrityHash,
+      incidentId: entity.incidentId,
+      schemaVersion: entity.schemaVersion,
+      appVersion: entity.appVersion,
+      modelHash: entity.modelHash,
+      audioFormat: entity.audioFormat,
+      savedAt: entity.savedAt,
+      previousVersionId: entity.previousVersionId,
+      metadataCiphertext: entity.metadataCiphertext,
+      metadataNonce: entity.metadataNonce,
+      metadataTag: entity.metadataTag,
     );
   }
 
@@ -71,6 +114,16 @@ class EvidenceRecordModel extends HiveObject {
       ivBytes: ivBytes,
       authTag: authTag,
       integrityHash: integrityHash,
+      incidentId: incidentId,
+      schemaVersion: schemaVersion,
+      appVersion: appVersion,
+      modelHash: modelHash,
+      audioFormat: audioFormat,
+      savedAt: savedAt,
+      previousVersionId: previousVersionId,
+      metadataCiphertext: metadataCiphertext,
+      metadataNonce: metadataNonce,
+      metadataTag: metadataTag,
     );
   }
 }

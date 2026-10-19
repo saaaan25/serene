@@ -147,6 +147,7 @@ class _MonitoringTaskHandler extends TaskHandler {
     FlutterForegroundTask.sendDataToMain({
       'status': controller.status.name,
       'error': controller.errorMessage,
+      'storageBlocked': controller.isStorageBlocked,
       'label': controller.lastDetectedClass,
     });
     unawaited(

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/services/monitoring_foreground_service.dart';
+import '../../../../core/constants/evidence_policy.dart';
+import '../../../../core/errors/failures.dart';
 import '../../../evidence_vault/domain/usecases/save_encrypted_evidence_usecase.dart';
 import '../../domain/entities/audio_window.dart';
 import '../../domain/entities/inference_result.dart';
@@ -21,6 +23,9 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   final AudioInferenceIsolate Function() _inferenceFactory;
   final Future<Map<String, double>> Function()? _coordinatesProvider;
   IncidentRecording? _incident;
+  int? _continuationEndSample;
+  bool _storageBlocked = false;
+  final Duration maximumIncidentDuration;
   Future<void> _windowWork = Future.value();
   int _queuedWindows = 0;
   StreamSubscription<Map<String, dynamic>>? _serviceSubscription;
@@ -49,6 +54,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     required SaveEncryptedEvidenceUseCase saveEvidenceUseCase,
     MonitoringForegroundService? foregroundService,
     this.runInService = false,
+    this.maximumIncidentDuration = EvidencePolicy.maximumIncidentDuration,
     AudioInferenceIsolate Function()? inferenceFactory,
     Future<Map<String, double>> Function()? coordinatesProvider,
   }) : _processAudioUseCase = processAudioUseCase,
@@ -70,12 +76,17 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   String? get errorMessage => _errorMessage;
   String get lastDetectedClass => _lastDetectedClass;
   bool get isMonitoring => _status == MonitoringStatus.active;
+  bool get isStorageBlocked => _storageBlocked;
 
   bool get _usesAndroidService => Platform.isAndroid && !runInService;
 
   void _onServiceEvent(Map<String, dynamic> event) {
     if (_disposed) return;
     final status = event['status'] as String?;
+    if (event['storageBlocked'] == true) {
+      _storageBlocked = true;
+      _monitoringRequested = false;
+    }
     if (status != null) {
       _status = MonitoringStatus.values.firstWhere(
         (s) => s.name == status,
@@ -152,6 +163,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> startMonitoring() async {
     if (_disposed) return;
+    _storageBlocked = false;
     _monitoringRequested = true;
     _retryTimer?.cancel();
     final lifecycleStop = _lifecycleStopFuture;
@@ -288,6 +300,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _processAudioWindow(AudioWindow window) async {
+    if (_storageBlocked) return;
     try {
       InferenceResult? result;
       if (_containsSignal(window.normalizedSamples)) {
@@ -313,8 +326,17 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       }
       var incident = _incident;
       if (incident == null) {
-        if (!(result?.isViolenceDetected ?? false)) return;
-        incident = IncidentRecording(window, result!);
+        if (!(result?.isViolenceDetected ?? false)) {
+          _continuationEndSample = null;
+          return;
+        }
+        incident = IncidentRecording(
+          window,
+          result!,
+          maximumDuration: maximumIncidentDuration,
+          afterSample: _continuationEndSample,
+        );
+        _continuationEndSample = null;
         _incident = incident;
         _lastDetectedClass = result.label;
         if (!_disposed) _notify();
@@ -322,7 +344,24 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         await _saveIncident(incident);
       } else {
         incident.append(window, result);
-        if (incident.shouldClose) {
+        if (incident.durationLimitReached) {
+          await _saveIncident(incident);
+          _incident = null;
+          _continuationEndSample = incident.endSampleIndex;
+          if ((window.endSampleIndex ?? incident.endSampleIndex) >
+                  incident.endSampleIndex &&
+              (result?.isViolenceDetected ?? false)) {
+            final next = IncidentRecording(
+              window,
+              result!,
+              maximumDuration: maximumIncidentDuration,
+              afterSample: incident.endSampleIndex,
+            )..coordinates = incident.coordinates;
+            _incident = next;
+            _continuationEndSample = null;
+            await _saveIncident(next);
+          }
+        } else if (incident.shouldClose) {
           await _saveIncident(incident);
           _incident = null;
         } else if (incident.checkpointDue) {
@@ -330,7 +369,15 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (error) {
-      _failMonitoring('Audio inference or evidence persistence failed: $error');
+      if (error is StorageCapacityFailure) {
+        _storageBlocked = true;
+        _monitoringRequested = false;
+        _failMonitoring(error.message);
+      } else {
+        _failMonitoring(
+          'Audio inference or evidence persistence failed: $error',
+        );
+      }
     }
   }
 
@@ -452,7 +499,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     // same incident on graceful stop instead of losing its last samples.
     await _windowWork;
     final incident = _incident;
-    if (incident != null) {
+    if (incident != null && !_storageBlocked) {
       try {
         await _saveIncident(incident);
         _incident = null;
@@ -462,6 +509,11 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     final inferenceIsolate = _inferenceIsolate;
+    if (_storageBlocked) {
+      _incident?.discard();
+      _incident = null;
+      _continuationEndSample = null;
+    }
     if (inferenceIsolate != null) {
       try {
         await inferenceIsolate.dispose();

@@ -32,7 +32,7 @@ Future<void> initServiceLocator() async {
   // FEATURE: Evidence Vault
   // Data sources
   sl.registerLazySingleton<EvidenceLocalDataSource>(
-    () => EvidenceLocalDataSourceImpl(),
+    () => EvidenceLocalDataSourceImpl(keyStorage: sl(), cipher: sl()),
   );
 
   // Repositories
@@ -58,13 +58,13 @@ Future<void> initServiceLocator() async {
 
   // FEATURE: Audio Monitoring
   // Data sources
-  sl.registerLazySingleton<AudioStreamDataSource>(() => AudioStreamDataSourceImpl());
+  sl.registerLazySingleton<AudioStreamDataSource>(
+    () => AudioStreamDataSourceImpl(),
+  );
 
   // Repositories
   sl.registerLazySingleton<MonitoringRepository>(
-    () => MonitoringRepositoryImpl(
-      audioStreamDataSource: sl(),
-    ),
+    () => MonitoringRepositoryImpl(audioStreamDataSource: sl()),
   );
 
   // Use cases

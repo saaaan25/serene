@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -10,6 +12,7 @@ import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../../domain/repositories/evidence_repository.dart';
 import '../../data/models/evidence_record_model.dart';
+import '../../domain/entities/evidence_record.dart';
 import '../../domain/entities/vault_item.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -20,25 +23,59 @@ class VaultScreen extends StatefulWidget {
 }
 
 class _VaultScreenState extends State<VaultScreen> {
-  Box<EvidenceRecordModel>? _evidenceBox;
+  List<EvidenceRecord> _records = [];
+  StreamSubscription<BoxEvent>? _changes;
+  String? _loadError;
+  Future<void>? _loading;
+  bool _reloadRequested = false;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _openBox();
+    _refreshRecords();
   }
 
-  Future<void> _openBox() async {
+  Future<void> _refreshRecords() {
+    _reloadRequested = true;
+    return _loading ??= _refreshLoop().whenComplete(() {
+      _loading = null;
+    });
+  }
+
+  Future<void> _refreshLoop() async {
+    do {
+      _reloadRequested = false;
+      await _loadRecords();
+    } while (mounted && _reloadRequested);
+  }
+
+  Future<void> _loadRecords() async {
     try {
-      if (Hive.isBoxOpen(HiveConstants.encryptedEvidenceBox)) {
-        _evidenceBox = Hive.box<EvidenceRecordModel>(
+      if (_changes == null) {
+        // Observe changes before reading through the authenticated repository.
+        final box = await Hive.openBox<EvidenceRecordModel>(
           HiveConstants.encryptedEvidenceBox,
         );
-      } else {
-        _evidenceBox = await Hive.openBox<EvidenceRecordModel>(
-          HiveConstants.encryptedEvidenceBox,
-        );
+        if (!mounted) return;
+        _changes = box.watch().listen((_) {
+          unawaited(_refreshRecords());
+        });
+      }
+      final records = await context
+          .read<EvidenceRepository>()
+          .getAllEvidenceRecords();
+      if (!mounted) return;
+      setState(() {
+        _records = records;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _records = [];
+          _loadError = 'vault_integrity_error';
+        });
       }
     } finally {
       if (mounted) {
@@ -49,17 +86,21 @@ class _VaultScreenState extends State<VaultScreen> {
     }
   }
 
-  List<VaultItem> _getRealVaultItems() {
-    if (_evidenceBox == null) return [];
+  @override
+  void dispose() {
+    _changes?.cancel();
+    super.dispose();
+  }
 
-    // Obtiene los modelos de Hive y los mapea a VaultItem ordenados cronológicamente
-    final records = _evidenceBox!.values.toList();
-    records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  List<VaultItem> _getRealVaultItems() {
+    final records = _records;
 
     return records.map((record) {
       return VaultItem(
         id: record.id,
-        name: '${record.predictionLabel}_${record.id.substring(0, 6)}',
+        name:
+            '${record.predictionLabel}_${record.logicalIncidentId.substring(0, record.logicalIncidentId.length < 6 ? record.logicalIncidentId.length : 6)}',
+        legacy: !record.hasAuthenticatedMetadata,
         date: record.timestamp.toLocal(),
         encrypted: true,
         type: 'audio',
@@ -69,28 +110,18 @@ class _VaultScreenState extends State<VaultScreen> {
 
   Future<void> _deleteRecord(String id) async {
     await context.read<EvidenceRepository>().deleteEvidenceRecord(id);
-    if (mounted) setState(() {});
+    await _refreshRecords();
   }
 
   Future<void> _openAudio(
     VaultItem item,
     String Function(String) translate,
   ) async {
-    final box = _evidenceBox;
-    if (box == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(translate('vault_audio_unavailable'))),
-      );
-      return;
-    }
-
-    var record = box.get(item.id);
-    if (record == null) {
-      for (final candidate in box.values) {
-        if (candidate.id == item.id) {
-          record = candidate;
-          break;
-        }
+    EvidenceRecord? record;
+    for (final candidate in _records) {
+      if (candidate.id == item.id) {
+        record = candidate;
+        break;
       }
     }
 
@@ -100,7 +131,7 @@ class _VaultScreenState extends State<VaultScreen> {
       );
       return;
     }
-    await context.push<void>('/vault/audio', extra: record.toEntity());
+    await context.push<void>('/vault/audio', extra: record);
   }
 
   @override
@@ -206,7 +237,17 @@ class _VaultScreenState extends State<VaultScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    if (vaultItems.isEmpty)
+                    if (_loadError != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          t(_loadError!),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      )
+                    else if (vaultItems.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 40.0),
                         child: Center(
@@ -227,6 +268,7 @@ class _VaultScreenState extends State<VaultScreen> {
                           child: _VaultItemCard(
                             item: item,
                             deleteActionText: t('vault_delete_action'),
+                            legacyText: t('vault_legacy_record'),
                             onTap: () => _openAudio(item, t),
                             onDelete: () {
                               showGeneralDialog<void>(
@@ -266,7 +308,6 @@ class _VaultScreenState extends State<VaultScreen> {
                                             ),
                                           );
                                         }
-
                                       },
                                     ),
                               );
@@ -286,12 +327,14 @@ class _VaultScreenState extends State<VaultScreen> {
 class _VaultItemCard extends StatelessWidget {
   final VaultItem item;
   final String deleteActionText;
+  final String legacyText;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _VaultItemCard({
     required this.item,
     required this.deleteActionText,
+    required this.legacyText,
     required this.onTap,
     required this.onDelete,
   });
@@ -330,7 +373,7 @@ class _VaultItemCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.name,
+                        item.legacy ? '${item.name} · $legacyText' : item.name,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),

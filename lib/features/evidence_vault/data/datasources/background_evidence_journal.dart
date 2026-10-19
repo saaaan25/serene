@@ -5,16 +5,26 @@ import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/errors/failures.dart';
+import '../../../../core/services/evidence_storage_guard.dart';
+import '../models/evidence_envelope.dart';
 import '../models/evidence_record_model.dart';
 import 'evidence_local_datasource.dart';
 
-/// Service writes encrypted records here; only the UI isolate opens Hive.
-/// Atomic claims keep a new checkpoint safe while the UI imports an older one.
+/// Immutable encrypted staging. Only the UI isolate writes Hive/audit.
+/// A claimed file survives a crash until its authenticated import is committed.
 class BackgroundEvidenceJournal implements EvidenceLocalDataSource {
   static Future<void>? _importing;
+  Future<void> _writing = Future.value();
   final Future<Directory> Function() _directoryProvider;
-  BackgroundEvidenceJournal({Future<Directory> Function()? directoryProvider})
-    : _directoryProvider = directoryProvider ?? _directory;
+  final Future<void> Function()? afterStagingFlush;
+  final EvidenceStorageGuard storageGuard;
+  BackgroundEvidenceJournal({
+    Future<Directory> Function()? directoryProvider,
+    this.afterStagingFlush,
+    EvidenceStorageGuard? storageGuard,
+  }) : _directoryProvider = directoryProvider ?? _directory,
+       storageGuard = storageGuard ?? EvidenceStorageGuard();
 
   static Future<Directory> _directory() async {
     final root = await getApplicationDocumentsDirectory();
@@ -23,39 +33,62 @@ class BackgroundEvidenceJournal implements EvidenceLocalDataSource {
     ).create(recursive: true);
   }
 
+  static void _checkId(String id) {
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id)) {
+      throw const CryptoFailure('Invalid evidence staging identifier');
+    }
+  }
+
   @override
-  Future<void> insertRecord(EvidenceRecordModel record) async {
+  Future<void> insertRecord(EvidenceRecordModel record) {
+    final task = _writing.then((_) async {
+      try {
+        await _stage(record);
+      } catch (error) {
+        throw EvidenceStorageGuard.classifyWriteError(error);
+      }
+    });
+    _writing = task.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return task;
+  }
+
+  Future<void> _stage(EvidenceRecordModel record) async {
+    _checkId(record.id);
+    EvidenceEnvelope.requireSealed(record);
+    if (record.schemaVersion != 2) {
+      throw const CryptoFailure(
+        'New staging records require an encrypted metadata envelope',
+      );
+    }
     final directory = await _directoryProvider();
     final destination = File('${directory.path}/${record.id}.json');
-    final temporary = File('${destination.path}.${const Uuid().v4()}.tmp');
-    try {
-      await temporary.writeAsString(
-        jsonEncode({
-          'id': record.id,
-          'timestamp': record.timestamp.toIso8601String(),
-          'label': record.predictionLabel,
-          'confidence': record.confidenceScore,
-          'gps': record.gpsCoordinates,
-          'audio': base64Encode(record.encryptedAudioBlob),
-          'iv': base64Encode(record.ivBytes),
-          'tag': base64Encode(record.authTag),
-          'hash': record.integrityHash,
-        }),
-        flush: true,
-      );
-      await temporary.rename(destination.path);
-    } finally {
-      if (await temporary.exists()) await temporary.delete();
+    final encoded = canonicalJson(EvidenceEnvelope.encode(record));
+    if (await destination.exists()) {
+      if (await destination.readAsString() == encoded) return;
+      throw const CryptoFailure('Cannot overwrite an immutable staged version');
     }
+    final temporary = File('${destination.path}.${const Uuid().v4()}.tmp');
+    // Include headroom for the later audited import while this staging file
+    // remains present. JSON/base64 and the encrypted WAL require extra bytes.
+    await storageGuard.ensureWrite(
+      directory.path,
+      utf8.encode(encoded).length * 5 + 256 * 1024,
+    );
+    // Keep a flushed .tmp on interruption: import can recover complete envelopes.
+    await temporary.writeAsString(encoded, flush: true);
+    await afterStagingFlush?.call();
+    await temporary.rename(destination.path);
   }
 
   static Future<void> importInto(
     Box<EvidenceRecordModel> box, {
     Directory? directory,
+    required Future<void> Function(EvidenceRecordModel) importer,
+    Future<DateTime> Function(EvidenceRecordModel)? ordering,
   }) async {
     if (!Platform.isAndroid && directory == null) return;
     if (_importing != null) return _importing;
-    final future = _import(box, directory);
+    final future = _import(directory, importer, ordering);
     _importing = future;
     try {
       await future;
@@ -65,50 +98,58 @@ class BackgroundEvidenceJournal implements EvidenceLocalDataSource {
   }
 
   static Future<void> _import(
-    Box<EvidenceRecordModel> box,
     Directory? overrideDirectory,
+    Future<void> Function(EvidenceRecordModel) importer,
+    Future<DateTime> Function(EvidenceRecordModel)? ordering,
   ) async {
     final directory = overrideDirectory ?? await _directory();
     final entries = await directory.list().toList();
+    final pending =
+        <({File file, EvidenceRecordModel record, DateTime order})>[];
     for (final entry in entries) {
-      if (entry is! File || !entry.path.endsWith('.json')) continue;
-      final claimed = entry.path.endsWith('.claimed.json')
-          ? entry
-          : await entry.rename(
+      if (entry is! File ||
+          (!entry.path.endsWith('.json') && !entry.path.endsWith('.tmp'))) {
+        continue;
+      }
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(await entry.readAsString()) as Map<String, dynamic>;
+      } on FormatException {
+        if (!entry.path.endsWith('.tmp')) rethrow;
+        // A partial temporary write was never committed by the service.
+        await entry.delete();
+        continue;
+      }
+      final record = EvidenceEnvelope.decode(data);
+      _checkId(record.id);
+      final order = ordering == null
+          ? record.timestamp
+          : await ordering(record);
+      pending.add((file: entry, record: record, order: order));
+    }
+    pending.sort((a, b) {
+      final order = a.order.compareTo(b.order);
+      return order == 0 ? a.record.id.compareTo(b.record.id) : order;
+    });
+    for (final item in pending) {
+      final claimed = item.file.path.endsWith('.claimed.json')
+          ? item.file
+          : await item.file.rename(
               '${directory.path}/${const Uuid().v4()}.claimed.json',
             );
-      final data =
-          jsonDecode(await claimed.readAsString()) as Map<String, dynamic>;
-      final record = EvidenceRecordModel(
-        id: data['id'] as String,
-        timestamp: DateTime.parse(data['timestamp'] as String),
-        predictionLabel: data['label'] as String,
-        confidenceScore: (data['confidence'] as num).toDouble(),
-        gpsCoordinates: (data['gps'] as Map).map(
-          (k, v) => MapEntry(k as String, (v as num).toDouble()),
-        ),
-        encryptedAudioBlob: base64Decode(data['audio'] as String),
-        ivBytes: base64Decode(data['iv'] as String),
-        authTag: base64Decode(data['tag'] as String),
-        integrityHash: data['hash'] as String,
-      );
-      final existing = box.get(record.id);
-      if (existing == null ||
-          record.encryptedAudioBlob.length >=
-              existing.encryptedAudioBlob.length) {
-        await box.put(record.id, record);
-        await box.flush();
-      }
+      await importer(item.record);
+      // Removal only follows the durable audit+record commit. Retries are harmless.
       await claimed.delete();
     }
   }
 
   @override
   Future<List<EvidenceRecordModel>> fetchAllRecords() async => [];
+
   @override
   Future<void> removeRecord(String id) async {
-    final directory = await _directoryProvider();
-    final file = File('${directory.path}/$id.json');
-    if (await file.exists()) await file.delete();
+    throw UnsupportedError(
+      'Evidence deletion is handled by the UI audit writer',
+    );
   }
 }
