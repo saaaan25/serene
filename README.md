@@ -77,5 +77,14 @@ The report marks real accuracy as unvalidated. The existing output model is
 preserved if validation fails. Copy a successful `model.tflite` into
 `assets/models/model.tflite` before building the Codemagic IPA.
 
+Export changes both feature-extractor and hidden activations to `gelu_fast`,
+exports ONNX opset 14 and checks float32 conversion against that PyTorch variant
+with absolute and relative tolerances of `1e-3`. The three synthetic windows are
+silence, uniform noise and a 440 Hz sine wave. The report includes class agreement
+and logit MAE against the assumed original configuration and float32 conversion.
+Acceptance requires size reduction after the structural and execution checks;
+there is no acceptance threshold for INT8 agreement or logit error. A successful
+export therefore does not establish predictive equivalence or real accuracy.
+
 Check that training class indices match `assets/labels/labels.txt`:
 0 = no_violence, 1 = physical_violence, 2 = verbal_violence.

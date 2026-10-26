@@ -1,6 +1,8 @@
 # Serene: documentación técnica para un informe de tesis
 
 **Fecha de elaboración:** 21 de octubre de 2026.  
+**Última revisión documental:** 25 de octubre de 2026.
+
 **Fuente:** revisión del código y de la documentación del repositorio.  
 **Estado:** base documental para adaptar al formato de la universidad.  
 **Versión declarada de la aplicación:** `1.0.0+1` en `pubspec.yaml`.
@@ -215,7 +217,28 @@ La puntuación softmax no constituye una probabilidad calibrada de que un hecho 
 
 ### 7.4. Procedencia y exportación del modelo
 
-El repositorio incluye `tool/export_wav2vec_tflite.py`. Según el README, esta herramienta espera un checkpoint `state_dict` de una arquitectura Wav2Vec2-base con tres clases, basada en `facebook/wav2vec2-base`. Su flujo genera un archivo TFLite y un reporte de conversión, con cuantización de rango dinámico de pesos INT8 y entrada/salida float32.
+El repositorio incluye `tool/export_wav2vec_tflite.py`. La herramienta recibe como único argumento un checkpoint `state_dict` de una arquitectura Wav2Vec2-base con tres clases, basada en `facebook/wav2vec2-base`. Carga los pesos en CPU con `weights_only=True` y exige coincidencia estricta de claves. La arquitectura no se infiere de pesos arbitrarios; su configuración se obtiene de Transformers, mediante descarga o caché. El script exige TensorFlow 2.17.x.
+
+Desde la raíz del repositorio:
+
+```sh
+python tool/export_wav2vec_tflite.py final_models/best_wav2vec.pt
+```
+
+El proceso escribe `model.tflite` y `model.report.json` en el directorio de trabajo actual. No instala automáticamente el resultado en los recursos de Flutter; después de una exportación aceptada debe copiarse a `assets/models/model.tflite` y comprobarse el orden de `assets/labels/labels.txt`.
+
+El flujo implementado comprende:
+
+1. Obtener una referencia PyTorch con la configuración base original y otra con `feat_extract_activation` y `hidden_act` cambiadas a `gelu_fast`. Este cambio de activación forma parte de la conversión y puede modificar los logits aun antes de cuantizar.
+2. Exportar únicamente logits a ONNX, con opset 14, dimensiones fijas y sin ejes dinámicos. Convertir mediante `onnx2tf` a SavedModel y a una referencia TFLite float32.
+3. Comparar esa referencia TFLite con PyTorch usando `gelu_fast`, con tolerancias absoluta y relativa de `1e-3`.
+4. Cuantizar por rango dinámico mediante `Optimize.DEFAULT`, con pesos INT8 y entrada/salida `float32 [1, 80000]` / `float32 [1, 3]`. No se proporciona un conjunto representativo ni se calibran activaciones; no es cuantización entera completa.
+5. Rechazar operadores personalizados, validar una única entrada y salida con los tipos y formas esperados, y ejecutar ambos TFLite sin delegados predeterminados. Se comprueba que existan constantes INT8 y operaciones de cómputo cuyos pesos sean INT8, además de salidas finitas.
+6. Exigir que el archivo cuantizado sea menor que la referencia float32 y publicar el modelo mediante reemplazo atómico después de superar las comprobaciones. El trabajo intermedio se realiza en un directorio temporal propio; un fallo previo a la publicación conserva el modelo de destino existente.
+
+Las entradas sintéticas son tres ventanas: silencio, ruido uniforme y una señal sinusoidal de 440 Hz, con semilla 42 para las fuentes aleatorias. Solo verifican ejecución y diferencias numéricas. El reporte registra versiones de TensorFlow, tamaños, reducción relativa, almacenamiento y operaciones INT8, acuerdo de clase y error absoluto medio de logits para las comparaciones float32/original, INT8/float32 e INT8/original. También declara la configuración original asumida, la activación de exportación y el orden de clases.
+
+El campo `accepted` expresa únicamente que hubo reducción de tamaño tras superar las comprobaciones anteriores. No se exige un umbral de acuerdo o de error para el modelo INT8 ni para el cambio frente a la configuración original. Las métricas de exactitud permanecen en `null` y `real_accuracy_validated` es `false`. Si solo falla la reducción de tamaño, se conserva un reporte con `accepted: false`; los fallos anteriores pueden ocurrir antes de escribir un reporte nuevo.
 
 Describir la herramienta no acredita que el archivo actualmente empaquetado provenga de una ejecución específica. Para establecer esa trazabilidad deben conservarse checkpoint, configuración, versiones de herramientas, reporte de exportación y hash del modelo desplegado.
 
@@ -306,6 +329,12 @@ Las restricciones de versiones se encuentran en `pubspec.yaml`; para reproducir 
 Android utiliza un servicio de tipo micrófono con notificación persistente y opción de detenerlo. Quitar la interfaz de aplicaciones recientes no pretende detener el servicio. No existe garantía de operación permanente ni reinicio del micrófono al arrancar el teléfono.
 
 En iOS, el README describe una sesión de audio activa y modo de audio en segundo plano. También indica alinear los pods de TensorFlow Lite a 2.17.0 mediante la herramienta del repositorio. Compilar iOS requiere un entorno macOS; la configuración disponible no sustituye una prueba en dispositivo.
+
+`tool/align_tflite_ios_podspec.rb` localiza `tflite_flutter` mediante `.dart_tool/package_config.json` y modifica su podspec en la instalación resuelta del paquete para fijar TensorFlow Lite 2.17.0. Debe ejecutarse después de `flutter pub get`. El `Podfile` establece iOS 15.0 como versión mínima y habilita el permiso de micrófono del plugin correspondiente.
+
+El flujo `codemagic.yaml` deshabilita Swift Package Manager, instala las dependencias Flutter, alinea el podspec y genera `ios/Flutter/Generated.xcconfig` con `flutter build ios --config-only --release --no-codesign --no-pub` antes de ejecutar CocoaPods. Después actualiza `TensorFlowLiteSwift` y `TensorFlowLiteC`, exige que ambos resuelvan exactamente a 2.17.0 y rechaza la presencia de `TensorFlowLiteSelectTfOps`. La compilación Release usa `--no-codesign` y empaqueta `serene-unsigned.ipa`; ese artefacto requiere firma y aprovisionamiento adecuados para instalarse en un dispositivo.
+
+La configuración iOS utiliza el runtime estándar, sin Select TF Ops ni flags de enlace Flex. Android conserva un canal nativo y una dependencia para crear un delegado Flex, y el motor Dart admite un puntero opcional; la presencia de ese soporte no significa que se utilice en el flujo habitual. La exportación descrita exige operadores integrados para evitar depender de ese delegado.
 
 ## 13. Metodología de investigación propuesta
 
@@ -491,6 +520,9 @@ Las siguientes fuentes se utilizaron para describir el proyecto. Los vínculos s
 - [Autenticación](../lib/features/auth/presentation/screens/auth_screen.dart).
 - [Sesión](../lib/core/services/session_manager.dart).
 - [Exportación del modelo](../tool/export_wav2vec_tflite.py).
+- [Alineación del runtime iOS](../tool/align_tflite_ios_podspec.rb).
+- [Configuración de CocoaPods](../ios/Podfile).
+- [Compilación y empaquetado iOS](../codemagic.yaml).
 - [Integridad y sus límites](evidence-integrity.md).
 - [Retención y capacidad](evidence-retention.md).
 
