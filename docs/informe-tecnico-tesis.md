@@ -1,530 +1,623 @@
-# Serene: documentación técnica para un informe de tesis
+# Serene: descripción técnica de los módulos implementados
 
-**Fecha de elaboración:** 21 de octubre de 2026.  
-**Última revisión documental:** 25 de octubre de 2026.
+**Fecha de actualización:** 27 de octubre de 2026.
 
-**Fuente:** revisión del código y de la documentación del repositorio.  
-**Estado:** base documental para adaptar al formato de la universidad.  
-**Versión declarada de la aplicación:** `1.0.0+1` en `pubspec.yaml`.
+**Versión declarada:** `1.0.0+1`.
 
-> Este documento describe la implementación disponible y propone un marco de investigación y evaluación. No acredita experimentos ejecutados, exactitud del clasificador, eficacia en situaciones reales ni validez judicial de los registros. Las propuestas de investigación deben ser confirmadas por el tesista y su asesor.
+**Referencia del código revisado:** `358d0179cd0d188c3d2c16875b14f91b5619097d`.
 
-## 1. Resumen
+**Objeto del documento:** describir el prototipo disponible en el repositorio para sustentar el apartado de desarrollo e implementación de una investigación.
 
-Serene es una aplicación desarrollada con Flutter y Dart para monitorear audio ambiental, ejecutar un clasificador de aprendizaje automático en el dispositivo y conservar registros de incidentes en una bóveda local cifrada. El modelo distingue tres etiquetas: ausencia de violencia, violencia física y violencia verbal. Una decisión positiva inicia la conservación del audio asociado al incidente; los registros incorporan metadatos autenticados y mecanismos locales de verificación de integridad y trazabilidad.
+**Fuentes:** código Flutter/Dart, configuración nativa, contrato del modelo y pruebas del proyecto.
 
-La solución organiza el código por funcionalidades y separa presentación, dominio y acceso a datos en sus módulos principales. Integra captura PCM, procesamiento asíncrono, inferencia TensorFlow Lite, cifrado AES-256-GCM, almacenamiento Hive y autenticación mediante los mecanismos del dispositivo. Android dispone de un servicio de primer plano para continuar el monitoreo cuando la interfaz deja de estar visible. El proyecto también contempla configuración y compilación para iOS, cuya operación debe comprobarse en hardware compatible.
+Este documento distingue la funcionalidad implementada, su verificación mediante pruebas de software y la evaluación experimental todavía pendiente. La existencia de código y pruebas automatizadas no demuestra exactitud predictiva en situaciones reales, funcionamiento continuo en todos los teléfonos ni validez jurídica de las grabaciones. Las fuentes internas permiten comprobar la implementación; los antecedentes y fundamentos científicos del informe requieren bibliografía académica adicional.
 
-La contribución técnica que puede estudiarse en una tesis es la integración de clasificación acústica local y conservación protegida de incidentes en un prototipo móvil. Su desempeño predictivo, consumo energético, usabilidad y estabilidad requieren una evaluación reproducible independiente de la existencia de pruebas de software.
+## 1. Descripción y alcance del prototipo
 
-**Palabras clave:** clasificación de audio, Flutter, TensorFlow Lite, procesamiento local, privacidad, cifrado autenticado, trazabilidad.
+Serene es una aplicación móvil desarrollada con Flutter y Dart que procesa audio ambiental en el dispositivo, clasifica ventanas de cinco segundos y conserva el audio de incidentes seleccionados por una política de alerta. El modelo produce tres categorías: `no_violence`, `physical_violence` y `verbal_violence`. Estas etiquetas representan predicciones acústicas del modelo; no constituyen una constatación independiente de que haya ocurrido violencia.
 
-## 2. Planteamiento del problema
+El flujo integra captura PCM, un búfer circular, inferencia TensorFlow Lite, formación de incidentes, cifrado autenticado, persistencia local, recuperación de escrituras y una interfaz con autenticación del dispositivo. La bóveda presenta un registro por incidente y permite escuchar o eliminar sus grabaciones. El monitoreo puede permanecer activo mientras la interfaz no está visible, sujeto a las capacidades y restricciones del sistema operativo.
 
-### 2.1. Problema técnico abordado
+El alcance de este repositorio es la integración móvil. La procedencia completa del conjunto de datos, el entrenamiento, las particiones de evaluación y las métricas del modelo requieren el expediente del proyecto de entrenamiento. No se implementan cuentas remotas, sincronización de evidencias, envío de audio a un servidor, despacho de emergencias ni avisos automáticos a contactos.
 
-Registrar manualmente un suceso requiere que la persona identifique lo ocurrido y actúe a tiempo. Una aplicación que procese audio ambiental puede automatizar parte de la identificación de patrones acústicos y conservar un segmento relevante. Esta automatización introduce dificultades: errores de clasificación, restricciones del sistema operativo, carga de inferencia y exposición de información sensible.
+La contribución técnica observable es la articulación de clasificación local y conservación protegida de incidentes. Su novedad científica, utilidad para la población objetivo y superioridad frente a otras soluciones deben sustentarse mediante antecedentes y evaluación, no inferirse de la integración del software.
 
-Serene aborda estas dificultades mediante inferencia local, almacenamiento cifrado y agrupación de decisiones en incidentes. La clasificación acústica expresa la salida de un modelo; por sí sola no demuestra que haya ocurrido violencia ni reconstruye el contexto del evento.
+## 2. Arquitectura y organización del software
 
-La magnitud social del problema, población afectada, antecedentes y contexto geográfico deben sustentarse con bibliografía y datos verificables en el informe académico. Esta revisión del repositorio no proporciona esa evidencia.
+### 2.1. Separación de responsabilidades
 
-### 2.2. Pregunta de investigación propuesta
+El proyecto organiza las funcionalidades principales en capas de presentación, dominio y datos. La presentación incluye pantallas y controladores; el dominio define entidades, contratos y casos de uso; la capa de datos implementa captura, inferencia, serialización y persistencia. Los componentes transversales de seguridad, procesamiento de señal, sesión y capacidad se concentran en `core`.
 
-¿Qué desempeño predictivo y operativo presenta un prototipo móvil que clasifica audio ambiental localmente y conserva incidentes mediante cifrado autenticado y trazabilidad local, bajo condiciones de evaluación controladas?
-
-### 2.3. Objetivo general propuesto
-
-Desarrollar y evaluar un prototipo móvil para clasificar patrones acústicos asociados a las categorías definidas por el modelo y conservar los incidentes detectados mediante mecanismos de confidencialidad, integridad y trazabilidad local.
-
-### 2.4. Objetivos específicos propuestos
-
-1. Implementar captura y preparación de audio compatibles con el modelo desplegado.
-2. Integrar inferencia local y una política temporal de formación de incidentes.
-3. Proteger audio y metadatos mediante cifrado autenticado y gestión local de claves.
-4. Incorporar consulta, reproducción y eliminación controlada de incidentes.
-5. Verificar el comportamiento del software ante alteraciones, interrupciones y falta de capacidad.
-6. Medir clasificación, latencia, consumo de recursos y continuidad en dispositivos definidos.
-
-Los cinco primeros objetivos tienen componentes implementados que pueden inspeccionarse en el código. La evaluación experimental del sexto y la demostración de cumplimiento integral requieren resultados documentados.
-
-## 3. Alcance y delimitaciones
-
-El alcance implementado comprende captura de micrófono, ventanas de análisis, clasificación de tres clases, formación de incidentes, persistencia cifrada, auditoría local, bóveda, reproducción en memoria, autenticación local y preferencias de interfaz.
-
-El diseño revisado no incorpora un backend de evidencias, cuentas remotas, despacho de emergencias, notificación a contactos ni verificación externa de autoría. Tampoco permite afirmar identificación de personas, comprensión contextual de una conversación o diagnóstico de violencia a partir de una predicción.
-
-La presencia de directorios de otras plataformas de Flutter no demuestra soporte funcional equivalente. El monitoreo depende de plugins y capacidades del sistema operativo; Android e iOS requieren validación específica. El cierre forzado, la revocación de permisos y la terminación del proceso pueden interrumpir la captura.
-
-## 4. Fundamentos técnicos aplicados
-
-### 4.1. Clasificación supervisada de audio
-
-El sistema recibe una señal y obtiene puntuaciones para etiquetas previamente definidas. La aplicación transforma los valores de salida mediante softmax y selecciona la clase de mayor puntuación. Para evaluar científicamente el modelo se necesitan datos etiquetados representativos y una partición de prueba independiente.
-
-### 4.2. Procesamiento en el dispositivo
-
-La inferencia se ejecuta con TensorFlow Lite sobre un archivo incluido en los recursos de la aplicación. El flujo principal revisado no requiere enviar audio a un servidor para clasificarlo. Esta decisión reduce la necesidad de transferencia de audio, aunque exige medir memoria, tiempo de procesamiento, batería y temperatura en el teléfono objetivo.
-
-### 4.3. Cifrado autenticado e integridad
-
-AES-GCM protege la confidencialidad y permite verificar autenticidad criptográfica bajo la clave utilizada. Los datos autenticados adicionales, o AAD, vinculan los metadatos con el audio. SHA-256 se emplea para obtener digests y enlazar eventos de auditoría. Un hash aislado no acredita autoría; las garantías dependen también de la protección de claves y referencias locales.
-
-### 4.4. Separación de responsabilidades
-
-Los módulos principales distribuyen responsabilidades entre interfaz y controladores, entidades y casos de uso, repositorios y fuentes de datos. Esta separación facilita revisar componentes y sustituir dependencias durante pruebas. La estructura se aproxima a una arquitectura por capas inspirada en Clean Architecture; no se afirma que todas las funcionalidades tengan idéntico grado de separación.
-
-## 5. Requisitos identificados
-
-### 5.1. Requisitos funcionales
-
-| ID | Requisito | Referencia principal |
-| --- | --- | --- |
-| RF-01 | Solicitar acceso al micrófono y capturar audio | `audio_stream_datasource.dart` |
-| RF-02 | Preparar ventanas de audio para el clasificador | `monitoring_repository_impl.dart`, `signal_normalizer.dart` |
-| RF-03 | Ejecutar clasificación local de tres categorías | `tflite_inference_engine.dart`, `assets/labels/labels.txt` |
-| RF-04 | Agrupar detecciones y muestras en incidentes | `monitoring_controller.dart`, `incident_recording.dart` |
-| RF-05 | Guardar audio y metadatos cifrados | `evidence_repository_impl.dart`, `cipher_manager.dart` |
-| RF-06 | Consultar y reproducir incidentes verificados | `evidence_controller.dart`, `audio_playback_screen.dart` |
-| RF-07 | Eliminar todas las versiones de un incidente | `evidence_local_datasource.dart` |
-| RF-08 | Restringir acceso mediante autenticación local | `auth_screen.dart`, `session_manager.dart` |
-| RF-09 | Mantener preferencias de idioma y apariencia | `app_settings.dart`, `app_settings_controller.dart` |
-| RF-10 | Transferir registros del servicio a la bóveda | `background_evidence_journal.dart` |
-
-Las rutas completas de los componentes se detallan en las secciones de arquitectura y trazabilidad.
-
-### 5.2. Atributos de calidad
-
-| Atributo | Mecanismo presente | Evidencia pendiente para la tesis |
-| --- | --- | --- |
-| Confidencialidad | Audio y metadatos nuevos cifrados; claves mediante almacenamiento seguro | Inspección en dispositivo y análisis del modelo de amenaza |
-| Integridad | AES-GCM, AAD, cadena de auditoría y referencia protegida | Resultados reproducibles de pruebas de alteración |
-| Recuperabilidad | WAL cifrado y diario de transferencia | Ensayos de cierres reales y fallos de almacenamiento |
-| Continuidad | Servicio Android e infraestructura de audio iOS | Medición con bloqueo, segundo plano e interrupciones |
-| Capacidad | Control de espacio y segmentación de incidentes | Medición en almacenamiento limitado |
-| Mantenibilidad | Capas, contratos e inyección de dependencias | Revisión arquitectónica y evolución controlada |
-| Usabilidad | Navegación inferior, traducciones y temas | Evaluación con participantes y protocolo definido |
-
-Estos mecanismos describen decisiones de implementación, no niveles de calidad ya medidos.
-
-## 6. Arquitectura del sistema
-
-### 6.1. Organización del repositorio
+La estructura está inspirada en una arquitectura por capas, sin que todas las pantallas utilicen exactamente la misma intermediación. Por ejemplo, `VaultScreen` consulta actualmente `EvidenceRepository` de forma directa y observa cambios de Hive; el proyecto conserva además un `EvidenceController` con sus propios estados y pruebas. Por ello, no corresponde afirmar que toda operación de la interfaz pasa por ese controlador.
 
 ```text
 lib/
-  main.dart                         Inicialización y arranque
-  app/                              Aplicación, rutas, dependencias y widgets
+  main.dart                Inicialización y arranque condicionado del monitoreo
+  app/                     Rutas, dependencias, preferencias y control de acceso al monitoreo
   core/
-    constants/                      Parámetros y políticas
-    crypto/                         Cifrado, claves y procedencia
-    dsp/                            Normalización y buffer de audio
-    services/                       Sesión, servicio y control de capacidad
-    localization/                   Traducciones
-    models/                         Preferencias persistentes
+    constants/             Parámetros de audio, clasificación y política de almacenamiento
+    crypto/                AES-GCM, claves y procedencia técnica
+    dsp/                   Conversión de PCM y búfer circular
+    models/                Preferencias persistentes
+    services/              Sesión, autenticación, capacidad y servicios móviles
   features/
-    audio_monitoring/               Captura, inferencia e incidentes
-      data/
-      domain/
-      presentation/
-    evidence_vault/                 Almacenamiento y consulta de evidencias
-      data/
-      domain/
-      presentation/
-    auth/                           Autenticación local
-    home/                           Pantalla principal
-    settings/                       Configuración
-assets/
-  models/model.tflite                Modelo desplegado
-  labels/labels.txt                  Orden de las clases
-test/                               Pruebas automatizadas
-tool/                               Exportación y ajustes de compilación
-docs/                               Documentación técnica
+    auth/                  Acceso inicial
+    audio_monitoring/      Captura, inferencia y formación de incidentes
+    evidence_vault/        Contenedores, auditoría, consulta, reproducción y eliminación
+    home/                  Estado operativo y estadísticas
+    settings/              Idioma, apariencia y control del micrófono
 ```
 
-### 6.2. Vista del flujo principal
+`get_it` registra repositorios, fuentes de datos y casos de uso en `service_locator.dart`. `Provider` expone dependencias y objetos `ChangeNotifier` al árbol de widgets. `go_router` define las rutas y redirige a la autenticación cuando no existe una sesión válida. Las dependencias de hardware, autenticación e intérprete se pueden sustituir en pruebas para verificar decisiones sin requerir un teléfono.
+
+### 2.2. Flujo general de datos
 
 ```mermaid
 flowchart TD
-    A[Micrófono y permisos] --> B[Captura PCM mono de 16 kHz]
-    B --> C[Normalización y ventanas de 5 segundos]
-    C --> D[Inferencia TensorFlow Lite]
-    D --> E{Decisión positiva}
-    E -->|Sí| F[Iniciar o prolongar incidente]
-    E -->|No| G[Actualizar cierre temporal]
-    G --> F
-    F --> H[Checkpoint y metadatos]
-    H --> I[Cifrado autenticado]
-    I --> J[Diario cifrado del servicio Android]
-    I --> K[Persistencia desde la interfaz]
-    J --> K
-    K --> L[Hive y auditoría local]
-    L --> M[Verificación y bóveda]
-    M --> N[Descifrado y reproducción en memoria]
+    A[Micrófono: PCM16 mono, 16 kHz] --> B[Conversión a float32 y búfer circular]
+    B --> C[Ventana de 5 segundos]
+    C --> D[Inferencia local en isolate]
+    D --> E{Decisión de alerta}
+    E -->|Negativa y sin incidente| F[Reemplazo posterior en memoria]
+    E -->|Positiva| G[Crear o continuar incidente]
+    E -->|Negativa con incidente activo| N[Incluir muestras nuevas y cerrar]
+    G --> H[Agregar muestras nuevas sin duplicar solapamiento]
+    H --> I[Cifrar audio y metadatos]
+    N --> I
+    I --> J[Persistencia y recuperación local]
+    J --> K[Bóveda después de autenticación]
+    K --> L[Autenticar y reproducir desde memoria]
+    K --> M[Confirmar, autenticar y eliminar versiones]
 ```
 
-La decisión negativa solo actualiza un incidente cuando existe uno abierto. Los caminos de persistencia dependen del contexto de ejecución: el servicio Android utiliza archivos intermedios y la interfaz mantiene la escritura de Hive y auditoría.
+En un incidente activo también se conserva la ventana que produce la primera decisión negativa, tras lo cual se realiza el guardado final. Las actualizaciones intermedias generan versiones cifradas recuperables. La interfaz selecciona la versión más reciente para evitar presentar cada actualización como un audio independiente.
 
-### 6.3. Inicialización y dependencias
+### 2.3. Componentes relevantes para la investigación
 
-`lib/main.dart` inicializa Flutter y Hive, registra adaptadores, abre el almacén de evidencias, instala la protección del ciclo de vida del grabador y configura las dependencias mediante `lib/app/service_locator.dart`. Después construye los proveedores de estado, el administrador de sesión y las rutas.
-
-El arranque programa el inicio del monitoreo después del primer frame. La autenticación de acceso a las pantallas y la autorización para utilizar el micrófono son mecanismos distintos; no debe suponerse que la pantalla de autenticación impide por sí misma iniciar el monitoreo. Este comportamiento debe explicarse al usuario durante la evaluación del prototipo.
-
-`get_it` registra servicios, repositorios, casos de uso y controladores. `provider` expone estado a los widgets y `go_router` administra navegación y redirección según la sesión.
-
-## 7. Subsistema de audio e inferencia
-
-### 7.1. Parámetros vigentes
-
-| Parámetro | Valor observado | Fuente |
+| Módulo | Responsabilidad principal | Implementación central |
 | --- | --- | --- |
-| Frecuencia de muestreo | 16 000 Hz | `AppConstants.sampleRate` |
-| Canales | Uno | `AppConstants.audioChannels` |
-| Captura | PCM de 16 bits, con conversión little-endian | Captura y `SignalNormalizer` |
-| Duración de ventana | 5 segundos | `AppConstants.windowDurationSeconds` |
-| Muestras por ventana | 80 000 | `AppConstants.expectedSampleCount` |
-| Avance nominal | 1 segundo tras completar la primera ventana | Repositorio de monitoreo |
-| Entradas del modelo mixto | PCM `float32 [1, 80000]` y longitudes `int32 [1]` con valor `[80000]` | Contrato móvil y motor |
-| Salida esperada con las etiquetas actuales | `float32 [1, 3]` | Motor y archivo de etiquetas |
-| Umbral de decisión | 0,60 | `AppConstants.classificationThreshold` |
-| Hilos configurados del intérprete | Dos | `TfliteInferenceEngine.initialize` |
+| Captura y permisos | Obtener audio y controlar su activación | `AudioStreamDataSourceImpl`, `MonitoringAccessController` |
+| Preparación de señal | Convertir muestras y construir ventanas | `SignalNormalizer`, `AudioBufferManager`, `MonitoringRepositoryImpl` |
+| Inferencia | Ejecutar el contrato del modelo mixto y decidir alertas | `TfliteInferenceEngine` |
+| Concurrencia y segundo plano | Separar inferencia de la interfaz y sostener sesiones móviles | `AudioInferenceIsolate`, `MonitoringForegroundService` |
+| Formación de incidentes | Acumular audio continuo y generar puntos de recuperación | `MonitoringController`, `IncidentRecording` |
+| Metadatos y ubicación | Incorporar contexto técnico y coordenadas autorizadas | `EvidenceProvenance`, captura de coordenadas en el controlador |
+| Criptografía | Proteger audio y metadatos y gestionar la clave | `CipherManager`, `SecureKeyStorage`, `EvidenceEnvelope` |
+| Almacenamiento local | Serializar contenedores, consultar versiones y transferir registros | `EvidenceRecordModel`, repositorio y fuentes locales |
+| Auditoría y recuperación | Detectar alteraciones y completar escrituras pendientes | `EvidenceAuditStore`, WAL y diario del servicio |
+| Migración | Convertir formatos anteriores sin cambiar el audio | `_migrateLegacy`, `privacy_migration` |
+| Autenticación y sesión | Proteger acceso y acciones sensibles | `DeviceAuthentication`, `SessionManager`, `VaultAccessGate` |
+| Presentación y reproducción | Consultar incidentes y escuchar audio en memoria | `HomeScreen`, `VaultScreen`, `AudioPlaybackScreen`, `InMemoryAudioPlayer` |
+| Preferencias y capacidad | Conservar configuración y controlar admisión de escrituras | `AppSettingsController`, `EvidenceStorageGuard` |
 
-El avance nominal produce ventanas superpuestas. El controlador adapta la frecuencia de inferencia en dispositivos lentos, por lo que no debe asumirse una predicción por segundo bajo toda condición de carga.
+## 3. Parámetros de la implementación revisada
 
-### 7.2. Preparación de la señal
+| Parámetro | Valor | Interpretación |
+| --- | --- | --- |
+| Audio de captura | PCM de 16 bits, little-endian | Muestras enteras con signo |
+| Frecuencia | 16 000 Hz | Parámetro de captura y contrato del modelo |
+| Canales | Uno | Audio mono |
+| Ventana de análisis | 5 segundos | 80 000 muestras |
+| Tamaño del PCM por ventana | 160 000 bytes | Antes de cifrado o cabecera WAV |
+| Avance nominal | 1 segundo después de completar el búfer | Ventanas superpuestas |
+| Entrada PCM al modelo | `float32 [1,80000]` | Un elemento por lote |
+| Entrada de longitudes | `int32 [1]`, valor `[80000]` | Número de muestras válidas |
+| Salida | `float32 [1,3]` | Probabilidades en el orden de etiquetas declarado |
+| Umbral de alerta | 0,60 | Valor actual de `classificationThreshold` |
+| Hilos del intérprete | Dos | No equivale a dos isolates |
+| Límite de ventanas pendientes | 30 | Protección ante acumulación de trabajo |
+| Puntos de recuperación | Inicial, cada 15 segundos nuevos y al cierre | Versiones completas del incidente |
+| Duración máxima predeterminada | Sin límite configurado | Sujeta a memoria y almacenamiento disponibles |
+| Margen de admisión | 100 MiB más estimación de escritura | Comprobación previa, no reserva física |
+| Inactividad de sesión | 5 minutos | Caducidad del acceso a la interfaz |
 
-`SignalNormalizer` convierte cada muestra entera de 16 bits a un valor flotante mediante:
+Estos valores se obtienen de `AppConstants`, `EvidencePolicy` y los controladores. Son parámetros del prototipo revisado, no valores óptimos demostrados mediante experimentación.
+
+## 4. Módulo de captura de audio y permisos
+
+### 4.1. Finalidad y funcionamiento
+
+La captura proporciona las muestras que consumen el análisis acústico y, cuando existe una alerta, la grabación del incidente. `AudioStreamDataSourceImpl` utiliza el paquete `record` para abrir un flujo de bytes mediante `startStream`, configurado con `AudioEncoder.pcm16bits`, 16 kHz y un canal. El flujo de monitoreo no utiliza la grabación a una ruta de archivo como paso previo a la clasificación.
+
+Antes de iniciar se comprueba el permiso con `hasPermission(request: false)`. Esta comprobación no abre por sí misma un diálogo de autorización. Si existe una sesión de grabación previa se intenta detenerla; ante ciertos fallos de apertura se libera y recrea el grabador para realizar un segundo intento. La configuración solicita pausa y reanudación ante interrupciones compatibles del audio; el resultado real depende del plugin y del sistema operativo.
+
+`RecorderLeakGuard` registra identificadores técnicos de grabadores en una caja auxiliar de Hive e intenta liberar los que quedaron registrados en una ejecución anterior. Este registro contiene identificadores de recursos, no muestras de audio, y no garantiza que el sistema operativo pueda recuperar cualquier sesión nativa después de un cierre abrupto.
+
+### 4.2. Activación y desactivación desde la interfaz
+
+`MonitoringSetting` incorpora un interruptor en Configuración. `MonitoringAccessController` coordina su cambio con una autenticación nueva mediante `DeviceAuthentication`. Si se cancela la autenticación no se modifica el monitoreo. En cada activación se consulta el permiso actual; si está denegado se solicita cuando el sistema lo permite y, si está restringido o denegado permanentemente, se ofrece abrir los ajustes del dispositivo.
+
+La activación se registra como exitosa solo después de iniciar el monitoreo. Si falla la persistencia de la preferencia de activación se intenta detener la captura. La desactivación espera a la parada de recursos, incluido un inicio que todavía estuviera pendiente. Si hay un incidente abierto, la parada normal intenta conservar su audio mediante un guardado final.
+
+El interruptor controla la captura de Serene, no revoca el permiso del sistema operativo. El permiso puede seguir concedido aunque el monitoreo esté desactivado. La preferencia se conserva entre aperturas y su valor predeterminado es `true`; al arrancar, `main.dart` intenta iniciar el monitoreo únicamente si esa preferencia está activada y la comprobación de permisos permite continuar. El acceso a la interfaz y la continuidad de la captura son estados distintos.
+
+**Fuentes:** [captura](../lib/features/audio_monitoring/data/datasources/audio_stream_datasource.dart), [control de activación](../lib/app/controllers/monitoring_access_controller.dart), [interruptor](../lib/features/settings/presentation/widgets/monitoring_setting.dart), [liberación de grabadores](../lib/core/services/recorder_leak_guard.dart).
+
+## 5. Módulo de preparación de señal y ventanas
+
+### 5.1. Conversión del audio
+
+`SignalNormalizer.pcm16ToNormalizedFloat32` interpreta los bytes como muestras PCM16 little-endian y convierte cada muestra a `float32` mediante:
 
 ```text
-x_normalizada = limitar(x_pcm / 32768, -1, 1)
-N = frecuencia × duración = 16 000 × 5 = 80 000 muestras
+x_float = limitar(x_pcm16 / 32768, -1, 1)
+N = frecuencia × duración = 16000 × 5 = 80000 muestras
 ```
 
-`AudioBufferManager` conserva muestras recientes en un buffer circular y obtiene una copia en orden temporal. El código también dispone de una función de relleno con ceros o truncamiento para ajustar longitudes. La presencia de esa utilidad no demuestra que se aplique en todos los caminos del flujo.
+Esta operación cambia la representación y escala de la señal. No realiza normalización estadística por media y varianza, porque esa transformación ya está incorporada en el modelo desplegado. Repetirla en la aplicación introduciría una preparación distinta de la establecida por el contrato de exportación.
 
-### 7.3. Decisión del clasificador
+### 5.2. Búfer circular y solapamiento
 
-El motor valida nombres, tipos y dimensiones de PCM y longitudes, redimensiona las entradas dinámicas y ejecuta el intérprete. La normalización estadística y softmax están incluidos en el modelo mixto; la app utiliza sus probabilidades sin aplicar otro softmax. Selecciona la etiqueta con mayor puntuación y considera positiva una ventana cuando:
+`AudioBufferManager` conserva las 80 000 muestras recientes en un arreglo circular. Al completarse su capacidad, los datos posteriores sustituyen las posiciones más antiguas. `getOrderedSnapshot` reconstruye la ventana en orden temporal, aunque la escritura haya cruzado el final del arreglo. `purge` limpia el arreglo y reinicia sus índices.
+
+`MonitoringRepositoryImpl` mantiene además un acumulador acotado de PCM original, porque la grabación conservada debe proceder de los bytes capturados y no de una reconstrucción de los flotantes. Una vez completa la primera ventana, emite normalmente una nueva ventana cada segundo de muestras recibidas. El tamaño de los bloques entregados por el dispositivo puede modificar la cadencia efectiva.
+
+Cada `AudioWindow` incluye las muestras flotantes, el PCM original, una fecha de emisión y `endSampleIndex`, que expresa la posición exclusiva del final de la ventana dentro de la sesión. Este índice permite determinar qué muestras de ventanas superpuestas ya se incorporaron al incidente. Al detener el flujo se puede emitir el último avance pendiente antes de purgar los búferes.
+
+La utilidad `padOrTruncate` existe en el módulo de señal, pero el motor actual exige ventanas completas. Su presencia no significa que la inferencia móvil acepte o trunque silenciosamente grabaciones arbitrarias.
+
+**Fuentes:** [conversión](../lib/core/dsp/signal_normalizer.dart), [búfer](../lib/core/dsp/audio_buffer_manager.dart), [ventanas](../lib/features/audio_monitoring/data/repositories/monitoring_repository_impl.dart), [entidad de ventana](../lib/features/audio_monitoring/domain/entities/audio_window.dart).
+
+## 6. Módulo de inferencia local y decisión de alerta
+
+### 6.1. Modelo desplegado y contrato
+
+El recurso `assets/models/model.tflite` corresponde al modelo mixto de la etapa de exportación. El archivo de la aplicación y el de `exports_tflite_mixed` se compararon mediante SHA-256 y coincidieron:
 
 ```text
-clase_predicha != no_violence Y puntuación_máxima >= 0,60
+f5b94431cada8c946f3c3d87922908740f29e99882abefe22ec70dfff6df693d
 ```
 
-El orden esperado es `0 = no_violence`, `1 = physical_violence` y `2 = verbal_violence`. El orden del entrenamiento y el de `labels.txt` deben coincidir.
+El [contrato móvil conservado](mobile-model-contract.json) declara entradas dinámicas, mezcla de tensores internos FP16 e INT8 y entrada/salida flotante para el audio y las probabilidades. Esto no debe describirse como un modelo completamente entero. La cuantización del grafo tampoco demuestra por sí sola una mejora de exactitud, latencia o energía en el teléfono.
 
-La puntuación softmax no constituye una probabilidad calibrada de que un hecho real haya ocurrido. El umbral de 0,60 es una configuración del prototipo; su idoneidad debe evaluarse mediante datos independientes.
+| Entrada o salida | Tipo | Forma inicial | Uso en Serene |
+| --- | --- | --- | --- |
+| `serving_default_pcm:0` | float32 | `[1,1]`, firma `[-1,-1]` | Redimensionada a `[1,80000]` |
+| `serving_default_valid_samples:0` | int32 | `[1]`, firma `[-1]` | Longitud `[80000]` |
+| Probabilidades | float32 | `[1,3]` | Tres clases en el orden de `labels.txt` |
 
-### 7.4. Procedencia y exportación del modelo
+La forma inicial `[1,1]` no limita el modelo a una muestra: es la forma de partida de una entrada dinámica. `TfliteInferenceEngine` identifica ambas entradas por nombre, valida sus tipos, redimensiona sus posiciones de entrada y reasigna los tensores antes de predecir. `tflite_flutter` realiza una asignación inicial al construir el intérprete; después de redimensionar se hace la asignación correspondiente a la ventana móvil.
 
-El modelo mixto actualmente empaquetado tiene dos entradas dinámicas y devuelve probabilidades. Su integración y la prueba de ejecución con ventanas de cinco segundos y lote uno se documentan en [mobile-model-integration.md](mobile-model-integration.md). La herramienta descrita a continuación utiliza un contrato anterior de entrada única y logits; no debe confundirse con la procedencia del modelo mixto ni sustituirlo automáticamente.
+El motor utiliza `runForMultipleInputs`, envía el audio como `Float32List` y la longitud como `Int32List`. Los índices de esa API corresponden a posiciones de entrada y salida, no a todos los identificadores internos del grafo. El límite de 224 000 muestras declarado por el modelo se verifica como restricción del contrato; la política móvil actual sigue usando únicamente 80 000 muestras por inferencia.
 
-El repositorio incluye `tool/export_wav2vec_tflite.py`. La herramienta recibe como único argumento un checkpoint `state_dict` de una arquitectura Wav2Vec2-base con tres clases, basada en `facebook/wav2vec2-base`. Carga los pesos en CPU con `weights_only=True` y exige coincidencia estricta de claves. La arquitectura no se infiere de pesos arbitrarios; su configuración se obtiene de Transformers, mediante descarga o caché. El script exige TensorFlow 2.17.x.
+### 6.2. Interpretación de la salida
 
-Desde la raíz del repositorio:
+El modelo incluye normalización estadística y softmax. La app conserva sus probabilidades originales y no aplica un segundo softmax. Antes de utilizarlas exige tres valores finitos dentro de `[0,1]` cuya suma sea cercana a uno. También valida el orden de etiquetas para evitar asociar una probabilidad a una categoría equivocada.
 
-```sh
-python tool/export_wav2vec_tflite.py final_models/best_wav2vec.pt
+```text
+0 → no_violence
+1 → physical_violence
+2 → verbal_violence
+
+decisión_positiva =
+    etiqueta_con_mayor_probabilidad != no_violence
+    Y probabilidad_máxima >= 0,60
 ```
 
-El proceso escribe `model.tflite` y `model.report.json` en el directorio de trabajo actual. No instala automáticamente el resultado en los recursos de Flutter; después de una exportación aceptada debe copiarse a `assets/models/model.tflite` y comprobarse el orden de `assets/labels/labels.txt`.
+El resultado se expresa mediante `InferenceResult`, que contiene etiqueta, confianza, puntuaciones de las tres categorías e indicador de alerta. Una etiqueta de violencia con confianza inferior al umbral produce una decisión negativa. El valor softmax no equivale a una probabilidad calibrada de ocurrencia de un hecho real; el umbral debe evaluarse según los costos de falsas alarmas y omisiones.
 
-El flujo implementado comprende:
+### 6.3. Relación con entrenamiento y exportación
 
-1. Obtener una referencia PyTorch con la configuración base original y otra con `feat_extract_activation` y `hidden_act` cambiadas a `gelu_fast`. Este cambio de activación forma parte de la conversión y puede modificar los logits aun antes de cuantizar.
-2. Exportar únicamente logits a ONNX, con opset 14, dimensiones fijas y sin ejes dinámicos. Convertir mediante `onnx2tf` a SavedModel y a una referencia TFLite float32.
-3. Comparar esa referencia TFLite con PyTorch usando `gelu_fast`, con tolerancias absoluta y relativa de `1e-3`.
-4. Cuantizar por rango dinámico mediante `Optimize.DEFAULT`, con pesos INT8 y entrada/salida `float32 [1, 80000]` / `float32 [1, 3]`. No se proporciona un conjunto representativo ni se calibran activaciones; no es cuantización entera completa.
-5. Rechazar operadores personalizados, validar una única entrada y salida con los tipos y formas esperados, y ejecutar ambos TFLite sin delegados predeterminados. Se comprueba que existan constantes INT8 y operaciones de cómputo cuyos pesos sean INT8, además de salidas finitas.
-6. Exigir que el archivo cuantizado sea menor que la referencia float32 y publicar el modelo mediante reemplazo atómico después de superar las comprobaciones. El trabajo intermedio se realiza en un directorio temporal propio; un fallo previo a la publicación conserva el modelo de destino existente.
+La aplicación consume un artefacto ya entrenado y exportado; no entrena en el teléfono. La documentación de la investigación debe conservar, en la etapa correspondiente, arquitectura de entrenamiento, datos y licencias, particiones, transformaciones, pesos seleccionados y reportes de conversión y evaluación.
 
-Las entradas sintéticas son tres ventanas: silencio, ruido uniforme y una señal sinusoidal de 440 Hz, con semilla 42 para las fuentes aleatorias. Solo verifican ejecución y diferencias numéricas. El reporte registra versiones de TensorFlow, tamaños, reducción relativa, almacenamiento y operaciones INT8, acuerdo de clase y error absoluto medio de logits para las comparaciones float32/original, INT8/float32 e INT8/original. También declara la configuración original asumida, la activación de exportación y el orden de clases.
+El repositorio también contiene `tool/export_wav2vec_tflite.py`, una herramienta anterior para un checkpoint Wav2Vec2-base de tres clases. Utiliza un contrato de entrada única fija y salida de logits. No debe confundirse con el exportador del modelo mixto actualmente desplegado ni usarse para sustituirlo automáticamente. Tampoco permite deducir, por sí sola, todos los detalles del entrenamiento del archivo mixto.
 
-El campo `accepted` expresa únicamente que hubo reducción de tamaño tras superar las comprobaciones anteriores. No se exige un umbral de acuerdo o de error para el modelo INT8 ni para el cambio frente a la configuración original. Las métricas de exactitud permanecen en `null` y `real_accuracy_validated` es `false`. Si solo falla la reducción de tamaño, se conserva un reporte con `accepted: false`; los fallos anteriores pueden ocurrir antes de escribir un reporte nuevo.
+**Fuentes:** [motor](../lib/features/audio_monitoring/data/datasources/tflite_inference_engine.dart), [etiquetas](../assets/labels/labels.txt), [integración y prueba del modelo](mobile-model-integration.md), [comprobación del archivo real](../tool/check_mobile_model.py).
 
-Describir la herramienta no acredita que el archivo actualmente empaquetado provenga de una ejecución específica. Para establecer esa trazabilidad deben conservarse checkpoint, configuración, versiones de herramientas, reporte de exportación y hash del modelo desplegado.
+## 7. Módulo de concurrencia y ejecución móvil
 
-Las comprobaciones sintéticas de conversión verifican aspectos técnicos y diferencias numéricas. No sustituyen una evaluación sobre audio real etiquetado. No se deducen del código el tamaño del conjunto de entrenamiento, sus idiomas, distribución, calidad de etiquetas, métricas o ausencia de sesgos.
+### 7.1. Inferencia fuera del isolate de interfaz
 
-## 8. Formación y conservación de incidentes
+`AudioInferenceIsolate` carga el recurso y las etiquetas desde el contexto principal y crea un isolate trabajador. El modelo se transfiere mediante `TransferableTypedData`; los puertos de envío y recepción intercambian solicitudes y resultados identificados por un número de petición. El trabajador mantiene su propio intérprete y comunica inicialización, predicción, error y liberación de recursos.
 
-Una ventana positiva inicia un incidente e incluye el audio de esa ventana. Se agregan solo las muestras nuevas de las ventanas posteriores para evitar duplicar el solapamiento. Se incluye la primera ventana negativa y se cierra el incidente.
+Esta separación evita ejecutar la inferencia sincrónica en el isolate que dibuja la interfaz. No implica que toda la aplicación sea paralela ni que cada ventana se procese simultáneamente. `MonitoringController` serializa las ventanas con una cadena de tareas para conservar el orden del audio y de sus decisiones.
 
-El primer segmento se guarda como checkpoint y se realizan nuevos checkpoints cada 15 segundos adicionales de audio. El cierre produce una versión final del mismo incidente. La bóveda muestra la versión más reciente; el almacén conserva versiones anteriores hasta eliminar el incidente. Por ello, reemplazar la representación visible no significa sobrescribir todo el historial persistido.
+El controlador mide la duración de predicción y ajusta el intervalo mínimo entre inferencias a `máximo(1000 ms, 1,25 × duración observada)`. Si una nueva ventana llega antes de ese intervalo puede reutilizar la predicción disponible. Se mantiene la captura de muestras para el incidente activo, pero no se debe afirmar una predicción nueva por segundo en todos los teléfonos. Si se acumulan 30 ventanas pendientes, el controlador informa que el procesamiento no mantiene el ritmo y activa su manejo de interrupción y reintento.
 
-La etiqueta y puntuación representativas corresponden a la predicción positiva de mayor confianza. La ubicación es opcional y se intenta obtener una vez por incidente; la ausencia de permiso o disponibilidad permite conservar un registro sin coordenadas.
+Los estados operativos son `idle`, `initializing`, `active`, `paused` y `error`. Los contadores de generación permiten invalidar un inicio pendiente cuando se solicita detener el monitoreo o se abandona una fase de inicio que no puede continuar. La falta de espacio bloquea nuevas escrituras y no se trata como un error que deba reintentarse indefinidamente.
 
-No hay limite predeterminado de duracion por incidente. Detener manualmente el monitoreo conserva el incidente abierto; una terminacion abrupta puede perder las muestras posteriores al ultimo checkpoint confirmado.
+### 7.2. Android
 
-## 9. Persistencia, seguridad y trazabilidad
+`MonitoringForegroundService` utiliza `flutter_foreground_task` para iniciar un servicio de tipo micrófono con notificación persistente y una acción para detenerlo. Ese servicio ejecuta captura, inferencia y guardados cifrados en un motor separado de la interfaz. Antes de iniciarlo se asegura la existencia de la clave compartida, evitando que dos motores intenten crear claves maestras independientes.
 
-### 9.1. Audio y metadatos
+El servicio comunica estados y disponibilidad de registros a la interfaz. Al detenerlo se solicita primero el cierre y guardado del incidente; la interfaz espera la respuesta antes de finalizar el servicio. No se habilita arranque automático del micrófono al iniciar el sistema ni tras reemplazar el paquete. Se permite mantener un bloqueo de CPU durante la sesión, sin que esto constituya una garantía de continuidad o bajo consumo.
 
-`CipherManager` utiliza AES-256-GCM. Las claves se gestionan mediante `SecureKeyStorage` y `flutter_secure_storage`. Esta elección utiliza mecanismos del entorno móvil; no demuestra por sí sola protección por hardware en todos los equipos ni exigencia de biometría para cada descifrado.
+La acción de detener de la notificación es una vía operativa distinta del interruptor autenticado de Configuración. No solicita `local_auth` ni representa necesariamente un cambio persistente de la preferencia. Por tanto, la exigencia de autenticación debe describirse para las acciones de interfaz que efectivamente la implementan, no para controles del sistema operativo.
 
-En el esquema 2, los metadatos incluyen identificadores de incidente y versión, fecha de inicio y guardado UTC, versión anterior, etiqueta, puntuación, GPS opcional, versión de la aplicación, hash SHA-256 del modelo y formato PCM. Se serializan como JSON canónico y se utilizan como AAD del audio. Un sobre cifrado adicional protege los metadatos en reposo.
+### 7.3. iOS
 
-Hive y el diario del servicio conservan representaciones cifradas, nonces, tags, el SHA-256 complementario del audio cifrado y una referencia técnica aleatoria independiente del identificador lógico. Los metadatos se reconstruyen en memoria después de verificarlos. Los formatos anteriores se migran mediante una transacción recuperable, verificando el audio antes de sustituirlo. La migración no autentica retrospectivamente sus metadatos anteriores.
+El proyecto declara el modo de audio en segundo plano en `Info.plist`, utiliza la configuración de audio de `record` y mantiene un flujo ya iniciado durante cambios de visibilidad compatibles. En iOS no se utiliza el servicio Android: el controlador opera en el proceso de la aplicación y la inferencia sigue aislada en su trabajador.
 
-### 9.2. Auditoría local
+Las declaraciones de permisos incluyen micrófono, ubicación durante el uso y Face ID. El proyecto configura iOS 15 como objetivo mínimo en CocoaPods. Las interrupciones de audio, llamadas, bloqueo de pantalla y terminación del proceso deben comprobarse en un iPhone real con la compilación definitiva. Una declaración de capacidad no demuestra que el monitoreo sobreviva al cierre forzado o a todas las políticas del sistema.
 
-El historial registra operaciones `create`, `new_version`, `delete`, `legacy_import` y `privacy_migration`. Los eventos contienen secuencia, identificadores, digests y enlace con el hash anterior. Su contenido está cifrado y autenticado. La referencia final de la cadena se conserva en almacenamiento seguro, separada de Hive.
+**Fuentes:** [trabajador de inferencia](../lib/features/audio_monitoring/presentation/isolates/audio_processing_isolate.dart), [controlador](../lib/features/audio_monitoring/presentation/controllers/monitoring_controller.dart), [servicio Android](../lib/core/services/monitoring_foreground_service.dart), [declaraciones iOS](../ios/Runner/Info.plist), [manifiesto Android](../android/app/src/main/AndroidManifest.xml).
 
-La reproducción verifica nuevamente la persistencia y auditoría antes del descifrado. Una alteración que rompa estas verificaciones debe producir un error, no una reconstrucción silenciosa de la cadena.
+## 8. Módulo de formación y conservación de incidentes
 
-### 9.3. Escritura recuperable
+### 8.1. Inicio, continuidad y cierre
 
-El almacenamiento utiliza un WAL cifrado para describir cambios pendientes antes de consolidarlos. La recuperación valida la transacción y completa de forma idempotente una operación confirmada como pendiente. Un WAL huérfano anterior a esa confirmación se descarta.
+Una decisión positiva crea `IncidentRecording` e incorpora el PCM completo de la ventana que produjo la alerta. Las ventanas siguientes se agregan usando `endSampleIndex`: solo se añaden las muestras posteriores a la última posición conservada. Así, varias ventanas superpuestas forman un audio continuo sin repetir sus tramos compartidos.
 
-Android ejecuta el servicio y la interfaz en motores distintos. El servicio escribe versiones cifradas en un diario de archivos, y la interfaz las importa mediante el único escritor de Hive y auditoría. Así se evita abrir la misma base desde ambos motores de forma concurrente. Los archivos completos pendientes permanecen hasta confirmar su importación; los duplicados idénticos no crean nuevas versiones.
+El incidente permanece abierto mientras las decisiones disponibles sean positivas. La primera decisión negativa incorpora sus muestras nuevas y cierra el incidente. En el código, una decisión negativa puede corresponder a `no_violence`, a una etiqueta de violencia por debajo del umbral o a una ventana exactamente nula que no se envía al modelo. Por ello, el cierre no se debe describir exclusivamente como una etiqueta `no_violence`.
 
-### 9.4. Modelo de amenaza y límites
+Las ventanas nulas se identifican comprobando que todas las muestras sean cero; no existe un detector general de actividad de voz ni un umbral acústico de silencio. En teléfonos lentos puede reutilizarse la predicción anterior hasta la siguiente inferencia efectiva. La fecha de cierre y el contexto conservado deben analizarse junto con esta política temporal.
 
-La protección local presupone que un atacante puede alterar Hive o archivos del diario, pero no controlar simultáneamente la clave, la referencia protegida y el proceso. Restaurar una copia antigua coherente de todo el estado, incluido el almacenamiento seguro, queda fuera de la detección local descrita.
+La etiqueta y confianza representativas del incidente corresponden a la predicción positiva de mayor confianza observada, no al promedio ni a una clasificación nueva de toda la grabación acumulada. La fecha de inicio se estima a partir de la fecha de la ventana y de la duración de las muestras inicialmente incorporadas.
 
-El sistema no dispone de sellado temporal externo, identidad de un tercero ni firma digital por hardware que acredite autoría independiente. Las fechas proceden del dispositivo. La trazabilidad técnica no equivale a cadena de custodia institucional ni certifica admisibilidad de una grabación.
+### 8.2. Versiones y puntos de recuperación
 
-## 10. Capacidad, retención y eliminación
+Se realiza un primer guardado de la ventana de alerta, otro cada 15 segundos nuevos de audio y un guardado final al cerrar o detener normalmente el monitoreo. Cada guardado cifra una instantánea completa y crea una versión con identificador propio, fecha de guardado y referencia a la versión anterior. Las escrituras del repositorio se serializan para conservar su orden.
 
-La política conserva incidentes hasta que el usuario los elimina manualmente. No hay caducidad por antigüedad ni borrado de incidentes para liberar espacio automáticamente.
+La bóveda muestra la última versión por incidente; las versiones anteriores permanecen hasta su eliminación. Si las fechas empatan, el repositorio favorece la versión con mayor longitud de audio cifrado, lo que conserva el comportamiento esperado para instantáneas antiguas con fechas iguales. Una interrupción abrupta puede perder las muestras posteriores al último guardado confirmado.
 
-Antes de escribir, el sistema consulta capacidad y exige un margen de 100 MiB más una estimación para la operación. Si no puede medir capacidad en un entorno soportado, no debe asumir espacio ilimitado. Los fallos de guardado deben distinguirse de una captura completada correctamente.
+No existe un límite predeterminado de duración del incidente. El código permite configurar un límite opcional y conserva pruebas de segmentación sin duplicar muestras, pero esa opción no está activada en la política actual. Ausencia de límite de producto no significa almacenamiento o memoria ilimitados.
 
-Eliminar un incidente retira sus versiones y añade un evento de auditoría. La implementación solicita compactación de Hive; si no puede realizarse, el mantenimiento puede quedar pendiente. El evento conserva trazabilidad residual cifrada sin conservar el audio como parte del evento.
+`IncidentCaptureGate` permanece como utilidad con pruebas, pero no gobierna el flujo actual de agrupación. La lógica efectiva corresponde a `MonitoringController` y `IncidentRecording`; no se debe atribuir a esa utilidad la selección vigente de audio.
 
-La eliminación no garantiza desaparición de bloques de memoria flash, snapshots o copias previas. No existe destrucción de una clave independiente por incidente. Android incorpora exclusiones de los mecanismos estándar de backup y transferencia, con los límites descritos en la documentación del repositorio.
+### 8.3. Política de minimización de audio
 
-El audio para reproducción se descifra en memoria y no se escribe deliberadamente como archivo en claro. Limpiar un buffer al cerrar la pantalla no permite asegurar la eliminación de todas las copias transitorias del runtime o del sistema operativo.
+Si no existe un incidente y la decisión es negativa, no se crea un registro de evidencia ni un archivo de audio para esa ventana. Las muestras recientes se mantienen temporalmente en los búferes y se reemplazan con datos posteriores. Una vez abierto un incidente, la ventana negativa de cierre sí forma parte del audio conservado para mantener su contexto final.
 
-Detalles complementarios: [integridad y trazabilidad](evidence-integrity.md) y [retención, capacidad y eliminación](evidence-retention.md).
+Esta política se refiere al audio y a los registros de evidencia. No significa que la aplicación nunca escriba en disco durante el funcionamiento normal: las preferencias y el registro técnico de grabadores también se persisten. Tampoco se ha medido un aumento de vida útil del almacenamiento atribuible al diseño.
 
-## 11. Interfaz, sesión y experiencia de uso
+**Fuentes:** [incidentes](../lib/features/audio_monitoring/presentation/controllers/incident_recording.dart), [política](../lib/core/constants/evidence_policy.dart), [repositorio de evidencias](../lib/features/evidence_vault/data/repositories/evidence_repository_impl.dart).
 
-La navegación principal contiene Inicio, Bóveda y Configuración. `BottomNavBar` enlaza `/home`, `/vault` y `/settings`, identifica la selección actual y adapta colores al tema. `StatefulShellRoute.indexedStack` organiza las ramas de navegación. La reproducción utiliza la ruta `/vault/audio`.
+## 9. Módulo de metadatos técnicos y ubicación autorizada
 
-La autenticación usa `local_auth` con `biometricOnly: false`; puede utilizar biometría o credenciales del dispositivo según soporte y configuración. No debe describirse como acceso exclusivamente biométrico. `SessionManager` define un vencimiento de cinco minutos por inactividad.
+Cada versión incorpora identificador lógico, identificador del incidente, fecha de inicio, fecha de guardado, versión anterior, etiqueta predicha, confianza, coordenadas opcionales, versión de la aplicación, SHA-256 del modelo y descripción del formato de audio. Las fechas se serializan en UTC y se muestran en hora local en la interfaz.
 
+`EvidenceProvenance` obtiene la versión y número de compilación instalados mediante `package_info_plus`. Calcula el SHA-256 sobre los bytes reales del recurso `model.tflite` y reutiliza el resultado durante la ejecución. Este dato permite relacionar el registro con una versión concreta del archivo del modelo; no acredita que la predicción sea correcta.
 
-## 12. Ejecución móvil y herramientas
+La ubicación se intenta obtener una vez por incidente mediante `geolocator`, después de comprobar que el servicio esté disponible y que exista autorización. En primer plano se puede solicitar permiso; el trabajador de segundo plano evita abrir ese diálogo. Si no existe permiso, el servicio está apagado o la consulta falla, el incidente se guarda sin coordenadas.
 
-| Tecnología | Papel en el proyecto |
+La solicitud utiliza precisión media y un límite de espera de diez segundos. Las coordenadas corresponden a la consulta disponible durante el guardado, no a un seguimiento continuo del recorrido ni necesariamente al instante exacto de inicio del audio. Tanto fechas como ubicación dependen del dispositivo y no constituyen un sello temporal o geográfico externo.
+
+## 10. Módulo de criptografía y seguridad
+
+### 10.1. Protección del contenedor
+
+`CipherManager` utiliza `AesGcm.with256bits()` del paquete `cryptography`. Las operaciones se realizan sobre bytes en memoria y producen texto cifrado, nonce y etiqueta de autenticación. El cifrado ocurre antes de persistir los registros nuevos.
+
+`EvidenceEnvelope` organiza el contenedor en dos bloques AES-GCM vinculados. Primero convierte los metadatos a JSON canónico, con claves ordenadas recursivamente y fechas suministradas en UTC. Esos bytes se emplean como datos autenticados adicionales —AAD— del audio. Después cifra los metadatos en un bloque separado, cuyo AAD vincula propósito, esquema y referencia técnica externa.
+
+Al descifrar se verifica la etiqueta correspondiente a cada bloque. Modificar el audio, los metadatos vinculados, los nonces, las etiquetas o los encabezados autenticados debe impedir una reconstrucción válida bajo la clave original. El contenedor es una unidad lógica de registro, aunque emplee dos operaciones de cifrado y no un único bloque binario.
+
+### 10.2. Identificadores y datos visibles
+
+El identificador lógico del registro y el del incidente permanecen dentro del sobre cifrado. Hive y los archivos de preparación utilizan una referencia aleatoria independiente, generada normalmente con UUID. Esa referencia sirve para localizar el contenedor, sin revelar directamente el identificador lógico.
+
+No se cifra todo el archivo de Hive. Permanecen visibles la referencia técnica, versión del formato, tamaños, nonces, etiquetas y hash complementario, además de la estructura necesaria para la persistencia. Los campos descriptivos antiguos del adaptador quedan vacíos o con valores neutros para los registros nuevos. Esto protege el contenido sensible descrito, pero no oculta por completo la cantidad o tamaño de los registros ni todos los patrones de acceso.
+
+### 10.3. Custodia de la clave
+
+`SecureKeyStorage` obtiene o crea una clave maestra de 256 bits y la entrega a `flutter_secure_storage`, configurado con `EncryptedSharedPreferences` en Android y Keychain en iOS. La serialización Base64 no es cifrado; la protección persistente depende del almacenamiento seguro del sistema operativo.
+
+La clave no se persiste deliberadamente en texto plano. Sus bytes sí existen temporalmente en la memoria del proceso para cifrar y descifrar; se limpian las copias modificables controladas por el código, sin garantizar la eliminación de todas las copias internas del runtime. Se valida que una clave recuperada tenga 32 bytes y se serializa su creación entre llamadas del mismo isolate.
+
+En iOS se configura accesibilidad `first_unlock`, compatible con la necesidad de utilizar la clave durante una sesión de monitoreo posterior al primer desbloqueo del dispositivo. No se debe afirmar que la clave sea necesariamente no exportable, esté protegida por hardware en todos los teléfonos o exija biometría para cada uso. `local_auth` protege acciones de interfaz; el cifrado de incidentes en segundo plano no presenta un diálogo biométrico por cada guardado.
+
+La aplicación utiliza una clave maestra compartida. No implementa claves independientes por incidente, rotación periódica ni un mecanismo de recuperación externa de esa clave. Su pérdida puede impedir descifrar los registros existentes.
+
+### 10.4. Nonces y SHA-256
+
+La biblioteca genera un nonce aleatorio por operación de cifrado; el audio y el sobre de metadatos tienen nonces separados. La generación aleatoria busca evitar reutilización con la misma clave, pero no se presenta como una garantía matemática de unicidad global ni como un contador persistente de nonces.
+
+El SHA-256 del audio cifrado se conserva en `integrityHash` y se verifica como comprobación complementaria. La auditoría calcula además resúmenes de la representación completa de cada contenedor. El nonce y la etiqueta participan en el descifrado autenticado; el hash complementario no es un requisito criptográfico para descifrar AES-GCM.
+
+Estos controles aportan confidencialidad e integridad técnica dentro del modelo de amenaza local. No son una firma digital de la usuaria, no acreditan autoría, no hacen inmutable el sistema de archivos y no certifican validez jurídica.
+
+**Fuentes:** [AES-GCM](../lib/core/crypto/cipher_manager.dart), [clave maestra](../lib/core/crypto/secure_key_storage.dart), [contenedor](../lib/features/evidence_vault/data/models/evidence_envelope.dart), [protección y alcance](privacy-and-encryption.md).
+
+## 11. Módulo de almacenamiento local y transferencia
+
+### 11.1. Persistencia de objetos
+
+Hive conserva objetos `EvidenceRecordModel`, serializados mediante un adaptador con identificadores de campo estables. El esquema actual conserva compatibilidad de lectura con versiones previas y añade los campos del sobre de metadatos. No se utiliza Hive como una garantía de cifrado general de la base; la protección se aplica a los campos del contenedor antes de guardarlos.
+
+| Almacén | Contenido y finalidad |
 | --- | --- |
-| Flutter y Dart | Interfaz y lógica de aplicación; SDK Dart declarado `^3.11.5` |
-| `record` | Captura del micrófono |
-| `tflite_flutter` | Ejecución local del modelo |
-| Isolates de Dart | Separación del procesamiento de audio respecto de la interfaz |
-| `cryptography` y `crypto` | AES-GCM y digests |
-| `flutter_secure_storage` | Persistencia de secretos y referencias protegidas |
-| Hive | Persistencia local de evidencias y ajustes |
-| `flutter_foreground_task` | Servicio de primer plano Android |
-| `geolocator` | Ubicación opcional de incidentes |
-| `permission_handler` | Gestión de permisos |
-| `local_auth` | Autenticación del dispositivo |
-| `just_audio` | Reproducción |
-| `get_it`, `provider`, `go_router` | Dependencias, estado y navegación |
-| `disk_space_2`, `path_provider` | Capacidad y rutas de almacenamiento |
-| `flutter_test`, `mocktail` | Pruebas y dobles de dependencias |
+| `encrypted_evidence` | Versiones de registros con audio y metadatos protegidos |
+| `evidence_audit_v2` | Eventos cifrados y transacciones de recuperación |
+| `appSettings` | Idioma, tema y preferencia de monitoreo |
+| `recorder_registry` | Identificadores técnicos para liberar grabadores previos |
+| Almacenamiento seguro del sistema | Clave maestra y referencia protegida de auditoría |
+| Directorio `background_evidence` | Contenedores cifrados pendientes de importación desde el servicio |
 
-Las restricciones de versiones se encuentran en `pubspec.yaml`; para reproducir un experimento deben registrarse también las versiones resueltas, el SDK y las herramientas nativas.
+`EvidenceRepositoryImpl` construye metadatos, cifra las instantáneas y delega su inserción. Para consultar, obtiene los modelos verificados, abre los sobres en memoria y selecciona una versión por incidente. La bóveda no presenta cada instantánea intermedia como un elemento separado.
 
-Android utiliza un servicio de tipo micrófono con notificación persistente y opción de detenerlo. Quitar la interfaz de aplicaciones recientes no pretende detener el servicio. No existe garantía de operación permanente ni reinicio del micrófono al arrancar el teléfono.
+Las estadísticas cuentan incidentes lógicos y suman los bytes de audio cifrado de todas sus versiones. Esa suma no equivale al tamaño total ocupado en disco: excluye metadatos, codificación JSON/Base64 de archivos de transferencia, índices, auditoría y marcos obsoletos de Hive.
 
-En iOS, el README describe una sesión de audio activa y modo de audio en segundo plano. También indica alinear los pods de TensorFlow Lite a 2.17.0 mediante la herramienta del repositorio. Compilar iOS requiere un entorno macOS; la configuración disponible no sustituye una prueba en dispositivo.
+### 11.2. Escritor de Hive y diario del servicio
 
-`tool/align_tflite_ios_podspec.rb` localiza `tflite_flutter` mediante `.dart_tool/package_config.json` y modifica su podspec en la instalación resuelta del paquete para fijar TensorFlow Lite 2.17.0. Debe ejecutarse después de `flutter pub get`. El `Podfile` establece iOS 15.0 como versión mínima y habilita el permiso de micrófono del plugin correspondiente.
+`EvidenceLocalDataSourceImpl` serializa las operaciones mediante una cola compartida en el isolate de interfaz. Antes de operar abre y verifica la auditoría, recupera transacciones aceptadas, importa archivos pendientes y migra formatos anteriores cuando corresponde.
 
-El flujo `codemagic.yaml` deshabilita Swift Package Manager, instala las dependencias Flutter, alinea el podspec y genera `ios/Flutter/Generated.xcconfig` con `flutter build ios --config-only --release --no-codesign --no-pub` antes de ejecutar CocoaPods. Después actualiza `TensorFlowLiteSwift` y `TensorFlowLiteC`, exige que ambos resuelvan exactamente a 2.17.0 y rechaza la presencia de `TensorFlowLiteSelectTfOps`. La compilación Release usa `--no-codesign` y empaqueta `serene-unsigned.ipa`; ese artefacto requiere firma y aprovisionamiento adecuados para instalarse en un dispositivo.
+El motor Android de segundo plano no abre la caja de evidencias para escribir concurrentemente. `BackgroundEvidenceJournal` recibe contenedores ya cifrados y los escribe como JSON en archivos temporales, realiza `flush` y después los renombra. El sufijo temporal no significa que contengan audio legible: el audio y los metadatos ya están protegidos.
 
-La configuración iOS utiliza el runtime estándar, sin Select TF Ops ni flags de enlace Flex. Android conserva un canal nativo y una dependencia para crear un delegado Flex, y el motor Dart admite un puntero opcional; la presencia de ese soporte no significa que se utilice en el flujo habitual. La exportación descrita exige operadores integrados para evitar depender de ese delegado.
+La interfaz ordena la importación por la fecha autenticada, reclama cada archivo, verifica su contenido y confirma su incorporación antes de retirarlo. Un temporal completo puede recuperarse tras una interrupción previa al renombrado; uno truncado y no confirmado se descarta. Repetir la importación idéntica es idempotente y no debe duplicar versiones. Se rechazan conflictos de contenido y predecesores ausentes cuando corresponde.
 
-## 13. Metodología de investigación propuesta
+**Fuentes:** [modelo Hive](../lib/features/evidence_vault/data/models/evidence_record_model.dart), [fuente local](../lib/features/evidence_vault/data/datasources/evidence_local_datasource.dart), [diario](../lib/features/evidence_vault/data/datasources/background_evidence_journal.dart), [repositorio](../lib/features/evidence_vault/data/repositories/evidence_repository_impl.dart).
 
-Se propone una investigación aplicada con desarrollo de un artefacto de software y evaluación experimental controlada. Esta clasificación debe ajustarse a las normas de la universidad. La estructura del código no permite afirmar que el proyecto haya seguido Scrum, una metodología experimental concreta o un proceso formal de ingeniería durante todo su desarrollo.
+## 12. Módulo de auditoría y recuperación transaccional
 
-### 13.1. Fases sugeridas
+### 12.1. Trazabilidad local
 
-1. Definir problema, usuarios, escenarios y restricciones de privacidad.
-2. Precisar requisitos y criterios medibles de aceptación.
-3. Documentar arquitectura, datos y modelo de amenaza.
-4. Registrar procedencia del modelo y condiciones de exportación.
-5. Congelar una versión del prototipo y ejecutar verificación de software.
-6. Evaluar clasificación y operación con un protocolo previamente definido.
-7. Analizar resultados, errores, limitaciones y posibilidades de reproducción.
+`EvidenceAuditStore` mantiene eventos para `create`, `new_version`, `delete`, `legacy_import` y `privacy_migration`. Su cuerpo incluye identificador del evento, secuencia, fecha del dispositivo, operación, incidente, referencias y resúmenes de versiones afectadas, elementos retirados y enlace con el evento anterior.
 
-### 13.2. Variables e indicadores
+El cuerpo se cifra y autentica con AES-GCM. La secuencia y el hash previo se vinculan como AAD; el SHA-256 del evento serializado enlaza el siguiente. La secuencia y resumen finales se conservan en almacenamiento seguro, separados de Hive. La verificación reconstruye el estado esperado y lo compara con los registros persistidos.
 
-| Dimensión | Indicador propuesto | Procedimiento |
+Dentro de ese modelo, las pruebas comprueban detección de modificaciones, borrados no registrados, recorte de eventos, cambios de orden, agregados inesperados y pérdida de la referencia protegida. La app no reconstruye silenciosamente una cadena rota para aceptar contenido alterado. Antes de reproducir también se verifica que el registro corresponda a su versión persistida y auditada.
+
+### 12.2. Diario de escritura anticipada
+
+La modificación se describe primero en un WAL —diario de escritura anticipada— cifrado. El procedimiento es:
+
+1. Persistir y vaciar el WAL que contiene el evento y los cambios previstos.
+2. Registrar en almacenamiento seguro la referencia y resúmenes de la transacción pendiente, conservando la cabeza anterior.
+3. Añadir y vaciar el evento de auditoría.
+4. Aplicar inserciones y eliminaciones y vaciar los registros.
+5. Actualizar la cabeza protegida, retirar el WAL y solicitar mantenimiento cuando corresponda.
+
+Si la interrupción ocurre después de registrar la referencia pendiente, una apertura posterior verifica el WAL y termina la transacción de forma idempotente. Un WAL huérfano anterior a esa aceptación se retira sin afirmar que la operación estuviera confirmada. Un WAL modificado o ausente cuando la referencia exige su presencia genera un error.
+
+### 12.3. Alcance de la protección
+
+La auditoría es local y registra modificaciones realizadas por la aplicación. No es un sistema institucional de custodia forense ni un sello temporal de un tercero. Sus garantías suponen que el atacante no controla simultáneamente la clave, la referencia protegida y el proceso.
+
+Restaurar una copia antigua coherente de todos los componentes, incluido el almacenamiento seguro, puede quedar fuera de la detección local. Tampoco se puede demostrar la existencia de un archivo del servicio que haya sido retirado antes de su incorporación. La trazabilidad técnica debe limitarse a los escenarios efectivamente verificados.
+
+**Fuentes:** [auditoría y WAL](../lib/features/evidence_vault/data/datasources/evidence_audit_store.dart), [explicación complementaria](evidence-integrity.md).
+
+## 13. Módulo de migración de registros anteriores
+
+El proyecto admite registros antiguos de esquema 1, cuyos metadatos no estaban cifrados, y contenedores anteriores de esquema 2 que utilizaban el identificador lógico como referencia externa o carecían del hash complementario actual. Una apertura verificada identifica esos casos y ejecuta `_migrateLegacy`.
+
+La migración verifica el hash disponible y el descifrado original, preserva el audio y los identificadores lógicos, construye metadatos protegidos y genera una nueva referencia externa. Antes de confirmar compara los bytes del audio vuelto a descifrar con el original. El reemplazo utiliza una transacción `privacy_migration` que incorpora el contenedor nuevo y retira el anterior dentro del mecanismo recuperable.
+
+Si falta espacio o falla la verificación no se confirma la sustitución. Una interrupción deja el original o una transacción pendiente recuperable, según la etapa alcanzada. Las pruebas reabren Hive y comprueban recuperación en cada etapa de escritura. El código conserva también compatibilidad con archivos antiguos del servicio que reutilizaban identificadores para distintas instantáneas.
+
+La protección nueva comienza con la migración: no demuestra retrospectivamente que metadatos antiguos no autenticados fueran correctos. La compactación posterior intenta retirar marcos obsoletos del archivo activo, pero no garantiza eliminar bloques históricos, copias de seguridad ni snapshots externos. La afirmación de metadatos protegidos debe referirse al formato activo nuevo o migrado, no a cualquier copia histórica que haya existido.
+
+## 14. Módulo de autenticación, autorización local y sesión
+
+### 14.1. Acceso y acciones sensibles
+
+`AuthScreen` solicita autenticación mediante `local_auth`. Se permiten biometría o credenciales del dispositivo con `biometricOnly: false`, según soporte y configuración. No existe una contraseña de cuenta remota administrada por Serene y la aplicación no recibe las plantillas biométricas del dispositivo.
+
+`DeviceAuthentication` centraliza las autenticaciones adicionales, evita solicitudes simultáneas dentro del servicio y registra el inicio y final del diálogo nativo en `SessionManager`. De este modo, los cambios de visibilidad asociados al diálogo no se interpretan automáticamente como una salida ordinaria de la aplicación.
+
+| Acción de la interfaz | Control implementado |
+| --- | --- |
+| Acceder a las pantallas internas | Autenticación inicial y sesión vigente |
+| Entrar a la lista de grabaciones | Autenticación adicional mediante `VaultAccessGate` |
+| Abrir cada audio para escucharlo | Autenticación nueva antes de descifrar |
+| Eliminar una grabación | Diálogo de confirmación y después autenticación nueva |
+| Activar o desactivar el monitoreo desde Configuración o su flujo de reintento | Autenticación nueva y controles de permiso correspondientes |
+
+`VaultAccessGate` observa la ruta de navegación y no monta la pantalla que consulta el repositorio hasta aceptar la autenticación. Salir a otra pestaña invalida ese acceso; volver exige autenticar de nuevo aunque la navegación conserve otras ramas de la interfaz. Si se cancela, la lista permanece bloqueada con una opción para reintentar.
+
+La eliminación solo llega al repositorio después de confirmar y autenticar. Mientras se procesa una eliminación se deshabilitan nuevas acciones de borrado para evitar solicitudes concurrentes. Cancelar el diálogo o la autenticación no retira el registro. La protección de estas acciones corresponde al flujo de interfaz; las operaciones internas de recuperación o migración no abren diálogos biométricos.
+
+### 14.2. Caducidad y privacidad de la interfaz
+
+`SessionManager` establece cinco minutos de inactividad y programa un temporizador. La aplicación registra interacciones de puntero y las autenticaciones adicionales aceptadas como actividad. Al caducar la sesión notifica al enrutador, que exige nuevamente el acceso inicial.
+
+`_AppPrivacyGuard` cubre el contenido durante cambios de visibilidad y cierra la sesión al pasar a estados oculto o pausado, salvo durante un diálogo de autenticación registrado. Esta cubierta reduce exposición visual desde la interfaz; no equivale a una garantía de bloqueo de capturas de pantalla del sistema operativo.
+
+El cierre de sesión afecta al acceso a las pantallas. No revoca automáticamente el permiso del micrófono ni implica que se deba detener una sesión de monitoreo solicitada y ya activa. La continuidad de captura y el acceso a grabaciones se controlan de manera separada.
+
+**Fuentes:** [acceso inicial](../lib/features/auth/presentation/screens/auth_screen.dart), [autenticación adicional](../lib/core/services/device_authentication.dart), [sesión](../lib/core/services/session_manager.dart), [barrera de la bóveda](../lib/features/evidence_vault/presentation/widgets/vault_access_gate.dart), [rutas](../lib/app/routes.dart), [protección visual](../lib/app/app.dart).
+
+## 15. Módulo de consulta y reproducción en memoria
+
+### 15.1. Consulta de registros
+
+`VaultScreen` consulta registros a través del repositorio y observa cambios en Hive para refrescar su lista. Serializa las recargas y solicita otra lectura si llega un cambio durante una consulta pendiente. Los errores de integridad impiden presentar una lista que el repositorio no haya podido verificar.
+
+Las tarjetas muestran la etiqueta y fecha del incidente y permiten abrir su audio o iniciar su eliminación. La representación de registros antiguos sigue disponible como compatibilidad de interfaz, aunque los formatos identificados por la apertura normal se migran al contenedor protegido actual.
+
+### 15.2. Descifrado y preparación del WAV
+
+`AudioPlaybackScreen` solicita autenticación propia antes de llamar a `getDecryptedAudioBytes`. El repositorio comprueba persistencia, auditoría y vinculación de metadatos y descifra el PCM con AES-GCM. La pantalla verifica que exista una cantidad par de bytes, compatible con PCM de 16 bits.
+
+El WAV se construye en un `Uint8List` en memoria: añade una cabecera de 44 bytes con frecuencia, canales y profundidad y copia las muestras PCM. Una vez construido, se limpia el búfer PCM controlado por la pantalla. Si esta ya se cerró o la sesión dejó de ser válida durante la preparación, se limpia el resultado y no se entrega al reproductor.
+
+### 15.3. Fuente multimedia volátil
+
+`InMemoryAudioSource` implementa `StreamAudioSource` de `just_audio`. Atiende rangos de bytes del WAV mediante vistas `Uint8List.sublistView`, evitando crear una copia completa por cada solicitud. `InMemoryAudioPlayer` proporciona reproducción, pausa, desplazamiento y visualización de tiempo.
+
+El flujo no utiliza un archivo WAV temporal legible ni un mecanismo de caché a archivo para reproducir el audio descifrado. Al cerrar la pantalla se sobrescribe el búfer WAV controlado por la aplicación y se retira su referencia; el widget libera el reproductor. Las pruebas también comprueban que un descifrado terminado después de cerrar la pantalla no deje su resultado disponible para reproducir.
+
+Las copias internas de decodificación, del runtime y del sistema operativo no están completamente bajo control del código Dart. Por ello, se afirma ausencia de escritura deliberada de archivos legibles y limpieza de los búferes propios, no eliminación absoluta de toda copia transitoria.
+
+**Fuentes:** [bóveda](../lib/features/evidence_vault/presentation/screens/vault_screen.dart), [pantalla de audio](../lib/features/evidence_vault/presentation/screens/audio_playback_screen.dart), [fuente y reproductor](../lib/features/evidence_vault/presentation/widgets/in_memory_audio_player.dart).
+
+## 16. Módulo de presentación y preferencias
+
+La navegación principal comprende Inicio, Grabaciones y Configuración. `BottomNavBar` mantiene la selección de la pestaña y `StatefulShellRoute.indexedStack` conserva las ramas de navegación. El acceso autenticado a grabaciones se controla por separado para no convertir esa conservación de estado en una autorización permanente.
+
+Inicio presenta el estado del monitoreo, la última etiqueta detectada, el estado de sesión y estadísticas del almacén. Los estados de error permiten consultar el detalle y reintentar el flujo de activación. La última etiqueta mostrada es un estado del controlador, no una nueva verificación del contenido de todos los registros guardados.
+
+Configuración permite seleccionar español o inglés, apariencia clara u oscura y la preferencia de monitoreo. `AppSettingsController` conserva esos valores en `appSettings`; el adaptador utiliza valores predeterminados al leer preferencias de formatos anteriores. `AppTranslations` centraliza mensajes y motivos de autenticación. El tema utiliza Material 3.
+
+La interfaz incorpora confirmaciones y mensajes de cancelación o fallo. La presencia de estos elementos no acredita por sí misma accesibilidad, comprensión de permisos o facilidad de uso: esos atributos requieren una evaluación con un protocolo y participantes definidos.
+
+**Fuentes:** [Inicio](../lib/features/home/presentation/screens/home_screen.dart), [Configuración](../lib/features/settings/presentation/screens/settings_screen.dart), [preferencias](../lib/app/controllers/app_settings_controller.dart), [modelo de preferencias](../lib/core/models/app_settings.dart), [traducciones](../lib/core/localization/app_translations.dart).
+
+## 17. Módulo de capacidad, retención y eliminación
+
+### 17.1. Admisión de escrituras y manejo de errores
+
+`EvidenceStorageGuard` consulta el volumen correspondiente a la ruta de persistencia mediante `disk_space_2`. Antes de admitir un guardado exige 100 MiB más una estimación conservadora de la escritura y su recuperación. Si no puede conocer el espacio disponible no lo trata como capacidad ilimitada. La comprobación no reserva físicamente esos bytes ni impide que otro proceso los consuma después.
+
+Se distinguen fallos de capacidad, criptografía, almacenamiento seguro y procesamiento. Los errores reconocidos de disco lleno se traducen a `StorageCapacityFailure`. Cuando se agota el almacenamiento, el controlador detiene la captura y conserva los puntos de recuperación ya confirmados; no elimina evidencias antiguas para admitir nuevas.
+
+Las operaciones de eliminación pueden ejecutarse sin exigir el margen normal de admisión, aunque siguen necesitando espacio para su transacción. La compactación solo se intenta si existe capacidad suficiente para reescribir los archivos activos. Si falla, queda mantenimiento pendiente para una apertura posterior.
+
+### 17.2. Crecimiento del almacenamiento
+
+El PCM ocupa 32 000 bytes por segundo. Un incidente de cinco minutos requiere 9 600 000 bytes para una sola representación de su audio, antes de sobrecargas. Como los puntos de recuperación son instantáneas completas y se conservan versiones, el espacio acumulado puede ser mucho mayor.
+
+Como estimación analítica, guardar a los segundos 5, 20, 35, …, 290 y al cierre en 300 segundos suma 104 000 000 bytes de audio entre versiones. Esto no es una medición de Hive ni del dispositivo: excluye metadatos, WAL, codificación, marcos obsoletos y otras copias temporales. El consumo de memoria también incluye flotantes, PCM, instantáneas y búferes criptográficos; no debe estimarse únicamente con el tamaño del archivo visible.
+
+La política sin límite predeterminado de duración exige medir este crecimiento con incidentes representativos. No se implementa una cuota global de evidencias ni eliminación por antigüedad. Los registros se conservan hasta su eliminación manual.
+
+### 17.3. Alcance de la eliminación
+
+Eliminar un incidente retira todas sus versiones activas dentro de una transacción recuperable y conserva un evento de auditoría cifrado, con identificadores y resúmenes, sin incluir allí el audio eliminado. La importación verifica el historial para evitar que un archivo pendiente vuelva a incorporar un incidente ya eliminado.
+
+Se solicita compactación de Hive para retirar marcos obsoletos de los archivos activos. Esto no garantiza borrado forense de bloques de memoria flash, snapshots, copias anteriores o backups. La clave maestra permanece disponible para otros registros; no existe destrucción de una clave exclusiva por incidente.
+
+Android configura exclusiones de sus mecanismos estándar de backup y transferencia para datos de la aplicación. Esas reglas no eliminan copias previas ni controlan por sí mismas los backups de iOS o herramientas externas.
+
+**Fuentes:** [control de capacidad](../lib/core/services/evidence_storage_guard.dart), [retención y eliminación](evidence-retention.md), [reglas Android](../android/app/src/main/res/xml/evidence_data_extraction_rules.xml).
+
+## 18. Integración nativa y construcción de artefactos
+
+`pubspec.yaml` declara Dart `^3.11.5` y las dependencias del proyecto; `pubspec.lock` conserva sus versiones resueltas. La versión declarada es `1.0.0+1`, aunque una compilación puede definir otros números que se obtienen después desde el paquete instalado.
+
+| Tecnología | Uso en el prototipo |
+| --- | --- |
+| Flutter/Dart | Interfaz, coordinación y lógica de aplicación |
+| `record` | Captura PCM en flujo |
+| `tflite_flutter` | Intérprete del modelo local |
+| `cryptography` y `crypto` | AES-GCM y SHA-256 |
+| `flutter_secure_storage` | Clave y referencia protegida de auditoría |
+| Hive | Objetos locales, preferencias y auditoría |
+| `local_auth` | Biometría o credenciales del dispositivo |
+| `permission_handler` y `geolocator` | Permisos de micrófono y ubicación opcional |
+| `just_audio` | Reproducción desde fuente de bytes en memoria |
+| `flutter_foreground_task` | Servicio Android de micrófono |
+| `disk_space_2`, `path_provider`, `package_info_plus` | Capacidad, rutas y versión instalada |
+| `provider`, `get_it`, `go_router` | Estado, dependencias y navegación |
+
+En Android la actividad deriva de `FlutterFragmentActivity`, compatible con el flujo de autenticación local. El manifiesto declara permisos de micrófono, ubicación y servicio, y configura la red local necesaria para la fuente de reproducción. El audio no se envía a un servicio remoto de clasificación. El repositorio conserva dependencias y un puente nativo para Flex, pero el trabajador actual se inicia con `flexDelegateAddress: null`; la existencia de ese puente no demuestra que se utilice en cada inferencia.
+
+En iOS, `tool/align_tflite_ios_podspec.rb` ajusta la dependencia nativa del plugin a TensorFlow Lite 2.17.0. `codemagic.yaml` instala dependencias, aplica esa alineación, verifica las versiones de `TensorFlowLiteC` y `TensorFlowLiteSwift`, compila sin firma y empaqueta `serene-unsigned.ipa`. El flujo rechaza la inclusión de Select TF Ops. Debe conservarse el registro de la compilación efectivamente evaluada para confirmar sus dependencias reales.
+
+El `.ipa` generado por ese flujo es un artefacto sin firma, no una publicación automática en App Store. La firma y distribución son pasos adicionales. La configuración Android de release utiliza actualmente firma de depuración. Estas configuraciones corresponden al prototipo de investigación y no acreditan un despliegue de producción.
+
+La compilación iOS requiere un entorno macOS/Xcode; no se produce de forma nativa desde este entorno Windows. Los cambios de código no actualizan la aplicación instalada en el teléfono: es necesario reconstruir e instalar un artefacto nuevo.
+
+**Fuentes:** [dependencias](../pubspec.yaml), [flujo iOS](../codemagic.yaml), [CocoaPods](../ios/Podfile), [alineación del runtime](../tool/align_tflite_ios_podspec.rb), [configuración Android](../android/app/build.gradle.kts).
+
+## 19. Verificación de software y evidencia disponible
+
+### 19.1. Pruebas automatizadas
+
+El 27 de octubre de 2026 se ejecutó la suite completa con `flutter test --no-pub`: **159 pruebas finalizaron correctamente**. Este resultado corresponde al código revisado y no debe extrapolarse a compilaciones posteriores sin repetir la verificación.
+
+| Área | Escenarios comprobados | Alcance de la evidencia |
 | --- | --- | --- |
-| Clasificación | Precisión, recall y F1 por clase; macro-F1 | Comparar etiquetas reales y predicciones |
-| Errores operativos | Falsas alarmas por hora y eventos omitidos | Sesiones anotadas, con definición previa de evento |
-| Rendimiento | Latencia de inferencia p50 y p95 | Instrumentación con reloj monotónico |
-| Detección | Tiempo hasta primera detección | Diferencia entre inicio anotado y decisión positiva |
-| Continuidad | Proporción de tiempo con captura activa | Sesiones de duración fija con registro de interrupciones |
-| Energía | Variación de batería y consumo cuando sea medible | Ensayos repetidos con condiciones comparables |
-| Recursos | RAM máxima, CPU y temperatura | Perfilado del dispositivo |
-| Persistencia | Guardados confirmados y recuperación | Fallos inducidos con criterios de éxito definidos |
-| Integridad | Alteraciones detectadas de las ensayadas | Modificar audio, metadatos, eventos y orden |
-| Usabilidad | Éxito de tareas, tiempo y valoración | Protocolo con participantes y consentimiento |
+| Señal y ventanas | Conversión de PCM, orden circular, sustitución de muestras y ventanas | Pruebas de lógica y repositorio con entradas controladas |
+| Motor TFLite | Redimensionamiento, dos entradas, tipos, etiquetas, probabilidades originales y rechazo de contratos incompatibles | Intérprete simulado en pruebas Dart |
+| Incidentes | Continuidad sin duplicación, cierre negativo, parada manual, duración superior a cinco minutos y límites opcionales | Flujos controlados, sin demostrar continuidad nativa de micrófono |
+| Criptografía y claves | Descifrado correcto, alteraciones, clave incorrecta, IV distintos y creación concurrente de clave | Almacenamiento seguro simulado |
+| Persistencia y auditoría | Altas, versiones, borrado, alteración de eventos, orden, cabeza y registros | Hive en directorios temporales y claves de prueba |
+| Recuperación y migración | Interrupciones en etapas del WAL, reapertura, migración y conservación del audio | Fallos inducidos de software, no cortes físicos de alimentación |
+| Diario Android | Temporales, importación, reintentos, conflictos y prevención de resurrección | Archivos controlados, sin afirmar ejecución real del servicio en el teléfono |
+| Acceso al monitoreo | Cancelación, permisos concedidos/denegados, persistencia y concurrencia | Dependencias de hardware y autenticación sustituidas |
+| Acceso a grabaciones | Bloqueo previo a consulta y nueva autenticación al volver a la pestaña | Pruebas de widgets y navegación |
+| Eliminación | Espera de autenticación y conservación ante cancelación | Pruebas de interfaz con repositorio simulado |
+| Reproducción | Autenticación antes del descifrado, limpieza de PCM/WAV y resultado tardío tras salir | Pruebas de widgets sin reproducción acústica nativa |
+| Capacidad | Espacio insuficiente, capacidad desconocida y compactación diferida | Medición de espacio simulada y errores controlados |
 
-La ventana es la unidad de inferencia, mientras que el incidente es la unidad de conservación. Deben reportarse métricas separadas por ventana y por evento: las ventanas superpuestas no son observaciones independientes.
+El análisis estático realizado durante la integración previa no encontró errores ni advertencias nuevas y mantuvo cuatro avisos informativos por propiedades de tema obsoletas en `app.dart`. Un analizador no demuestra ausencia de vulnerabilidades ni sustituye las pruebas en dispositivo.
 
-## 14. Plan de validación
+No se encontró una prueba dedicada que simule los cinco minutos completos de inactividad, la renovación temporal por interacción y la caducidad durante reproducción. La lógica existe y se prueba el rechazo de sesiones cerradas en otros escenarios, pero esos casos temporales siguen pendientes de verificación específica.
 
-### 14.1. Pruebas de software existentes
+### 19.2. Ejecución del archivo real del modelo
 
-El árbol `test/` contiene pruebas para normalización, buffers, cifrado, almacenamiento de claves, control de capacidad, captura e incidentes, monitoreo continuo, persistencia, integridad, diario de segundo plano y presentación de la bóveda.
+Durante la integración se ejecutó `tool/check_mobile_model.py` con el archivo real, TensorFlow 2.19.0, dos hilos CPU, cinco segundos y lote uno. Las tres señales sintéticas completaron la asignación, el redimensionamiento y la inferencia y produjeron salidas finitas `[1,3]` con suma próxima a uno.
 
-Ejemplos de evidencia localizable:
+| Señal | Sin violencia | Violencia física | Violencia verbal |
+| --- | ---: | ---: | ---: |
+| Silencio absoluto | 0.00117439 | 0.99806505 | 0.00076050 |
+| Seno de 440 Hz | 0.99764258 | 0.00102552 | 0.00133186 |
+| Ruido uniforme con semilla 42 | 0.99762446 | 0.00099326 | 0.00138231 |
 
-| Grupo | Archivos representativos |
-| --- | --- |
-| Señal | `test/core/dsp/signal_normalizer_test.dart`, `audio_buffer_manager_test.dart` |
-| Criptografía | `test/core/crypto/cipher_manager_test.dart`, `secure_key_storage_test.dart` |
-| Capacidad | `test/core/services/evidence_storage_guard_test.dart` |
-| Incidentes | `test/features/audio_monitoring/presentation/incident_recording_test.dart` |
-| Continuidad | `test/features/audio_monitoring/presentation/continuous_monitoring_test.dart` |
-| Integridad y recuperación | `test/features/evidence_vault/data/evidence_integrity_test.dart` |
-| Diario | `test/features/evidence_vault/data/background_evidence_journal_test.dart` |
-| Interfaz | `test/features/evidence_vault/presentation/vault_integrity_ui_test.dart` |
+La salida del silencio constituye un falso positivo sintético. El controlador evita enviar ventanas exactamente nulas, pero eso no valida ruido ambiental, entradas de baja amplitud ni silencio capturado con un micrófono real. Los resultados solo acreditan ejecución y semántica numérica del contrato en el equipo. No son una evaluación de sensibilidad, especificidad o calidad móvil.
 
-La existencia de estos archivos no demuestra que las pruebas hayan pasado en la versión utilizada para la tesis. Esta tarea documental no ejecutó la suite ni generó métricas de cobertura.
+El contrato de exportación registra validación con lotes de cuatro y un límite de 14 segundos. Esos antecedentes no demuestran calidad en ventanas móviles de cinco segundos y lote uno. La compatibilidad y el rendimiento del runtime iOS 2.17.0 deben verificarse en el iPhone; la ejecución del equipo utilizó TensorFlow 2.19.0.
 
-Comandos para obtener evidencia reproducible desde la raíz:
+### 19.3. Reproducción de las comprobaciones
+
+Desde la raíz del repositorio, con las dependencias correspondientes instaladas:
 
 ```powershell
-flutter pub get
-flutter analyze
-flutter test
+flutter test --no-pub
+flutter analyze --no-pub
+python -B tool/check_mobile_model.py
 ```
 
-Se deben conservar salida completa, fecha, commit y entorno. Las pruebas con plugins simulados no demuestran comportamiento real del micrófono, almacenamiento seguro o servicio móvil.
+El último comando requiere un entorno con TensorFlow y NumPy; no utiliza el runtime nativo del iPhone. Para reproducibilidad académica deben archivarse salida de comandos, fecha, commit, modelo, versiones resueltas y configuración de la máquina o dispositivo utilizado.
 
-### 14.2. Evaluación del modelo
+## 20. Evaluación experimental pendiente
 
-Se recomienda usar un conjunto de prueba etiquetado independiente del entrenamiento y selección del umbral. La separación debe realizarse por fuente, sesión o participante antes de formar ventanas superpuestas, para evitar fuga de información.
+Los mecanismos implementados permiten diseñar experimentos, pero sus resultados no deben anticiparse. Como mínimo, la investigación debe definir:
 
-El protocolo debe incluir sonidos no violentos difíciles, ruido, distancias, ambientes, idiomas pertinentes y condiciones de grabación variables. Cada etiqueta debe tener una definición operacional y un procedimiento de anotación. Se deben reportar matriz de confusión, métricas por clase, distribución de muestras y limitaciones de representatividad.
-
-Si se comparan modelos o umbrales, la selección debe hacerse con validación y reservar el conjunto de prueba para la evaluación final. Los intervalos de incertidumbre deben respetar la agrupación de ventanas por grabación o sesión.
-
-### 14.3. Evaluación en dispositivo
-
-Realizar sesiones con pantalla encendida, bloqueada y aplicación en segundo plano; interrupciones de audio; permisos denegados o revocados; reinicio y cierre forzado; almacenamiento reducido; incidentes prolongados y detención manual. Repetir en los equipos objetivo y conservar registros de los fallos observados.
-
-Para cada experimento registrar modelo de teléfono, sistema operativo, commit, hash del modelo, versión de la aplicación, permisos, duración, nivel inicial de batería y condiciones ambientales. El ensayo debe distinguir cierre normal, terminación del proceso y apagado del dispositivo.
-
-### 14.4. Plantilla de resultados
-
-| Experimento | Dispositivo y versión | Datos o duración | Métrica | Resultado | Evidencia |
-| --- | --- | --- | --- | --- | --- |
-| Clasificación independiente | Por completar | Por completar | Macro-F1 y métricas por clase | No medido | Reporte y matriz |
-| Monitoreo en segundo plano | Por completar | Por completar | Continuidad e interrupciones | No medido | Log de sesión |
-| Consumo energético | Por completar | Por completar | Consumo por hora | No medido | Medición y condiciones |
-| Recuperación ante cierre | Por completar | Por completar | Checkpoints recuperados | No medido | Registro de ensayo |
-| Alteración de evidencia | Por completar | Por completar | Casos rechazados | No ejecutado en esta revisión | Salida de pruebas |
-
-## 15. Consideraciones éticas y de privacidad
-
-El micrófono puede captar información de terceros y conversaciones sensibles. Un estudio con personas debe definir consentimiento, finalidad, acceso a grabaciones, retención y procedimiento de eliminación, de acuerdo con la revisión ética y los requisitos institucionales aplicables.
-
-Para evaluar el prototipo se deben preferir escenarios controlados y material obtenido con autorización. La interpretación de falsas alarmas y omisiones debe formar parte del análisis: ambos errores pueden afectar la confianza y el uso del sistema.
-
-Este documento no determina la legalidad de grabaciones ni el cumplimiento de una normativa específica. Cualquier afirmación jurídica en la tesis requiere un análisis propio sustentado en fuentes vigentes y en el contexto de uso.
-
-## 16. Participación de un agente de inteligencia artificial
-
-### 16.1. Asistencia realizada en esta documentación
-
-Un agente de IA asistió en la inspección de archivos del repositorio y en la redacción de este documento. La asistencia consistió en sintetizar estructura, parámetros, componentes y límites técnicos; proponer objetivos, indicadores y un plan de evaluación; y diferenciar implementación disponible de resultados aún no acreditados.
-
-Esta intervención documental no permite atribuir al agente la autoría de todo el software, el entrenamiento del modelo o decisiones históricas del proyecto. Tales contribuciones requieren registros propios. El tesista debe revisar las afirmaciones y asumir la responsabilidad de la versión incorporada al informe.
-
-### 16.2. Registro de asistencia recomendado
-
-| Campo | Información que debe conservarse |
-| --- | --- |
-| Fecha | Día de la interacción |
-| Herramienta y modelo | Nombre y versión cuando estén disponibles |
-| Propósito | Documentación, explicación, revisión o implementación |
-| Entrada | Solicitud y archivos compartidos, excluyendo secretos |
-| Resultado | Documento, propuesta o cambio producido |
-| Validación humana | Qué se contrastó y quién lo revisó |
-| Evidencia | Commit, diff o registro de conversación pertinente |
-
-No deben inventarse versiones del modelo asistente, porcentajes de contribución ni horas ahorradas. La declaración académica debe seguir las reglas de la institución.
-
-### 16.3. Declaración adaptable para la tesis
-
-> Se utilizó un agente de inteligencia artificial como apoyo para inspeccionar la estructura del repositorio y elaborar un borrador de documentación técnica. Las descripciones se contrastaron con los archivos disponibles. Las propuestas metodológicas requieren revisión del autor y del asesor. La asistencia no se utilizó como evidencia de desempeño del sistema ni como sustituto de la evaluación experimental. El autor es responsable de verificar el contenido y declarar el uso de estas herramientas conforme a las disposiciones institucionales.
-
-Antes de incorporar esta declaración, el autor debe realizar el contraste indicado y adaptarla al uso real de IA durante la investigación.
-
-## 17. Discusión, aportes y limitaciones
-
-El prototipo integra captura continua, inferencia local y conservación cifrada en una aplicación móvil. La formación de incidentes evita tratar cada ventana superpuesta como un archivo independiente, mientras que el versionado permite checkpoints con historial. La separación del diario Android y Hive responde a la concurrencia entre el servicio y la interfaz.
-
-Estos aportes son verificables como decisiones de implementación. No bastan para afirmar novedad científica, superioridad frente a otras soluciones o impacto en la reducción de violencia. Tales conclusiones necesitan revisión de antecedentes y comparación experimental.
-
-Las limitaciones principales son la falta de métricas experimentales aportadas por esta revisión, procedencia del entrenamiento pendiente de documentar, sensibilidad al entorno acústico, restricciones de segundo plano, dependencia del estado del dispositivo, crecimiento del almacenamiento por snapshots completos y alcance local de las garantías de integridad.
-
-## 18. Trabajo futuro propuesto
-
-1. Completar documentación del entrenamiento y evaluación independiente del modelo.
-2. Evaluar el umbral y la calibración según los costos de falsas alarmas y omisiones.
-3. Medir latencia, memoria, batería y temperatura en distintos teléfonos.
-4. Validar recuperación ante cierres y fallos físicos de almacenamiento.
-5. Evaluar accesibilidad, claridad de permisos y comprensión de los estados de monitoreo.
-6. Estudiar claves independientes por incidente y sus implicaciones de recuperación.
-7. Analizar mecanismos externos de trazabilidad solo si los requisitos justifican su complejidad y tratamiento adicional de datos.
-
-Estas líneas son propuestas; no se presentan como funcionalidades entregadas.
-
-## 19. Guía para integrar el contenido en la tesis
-
-| Parte del informe | Material de este documento | Información por completar |
+| Dimensión | Qué medir o verificar | Condiciones que deben registrarse |
 | --- | --- | --- |
-| Introducción y problema | Secciones 1 a 3 | Contexto, antecedentes y delimitación institucional |
-| Marco teórico | Sección 4 | Bibliografía académica y discusión de trabajos relacionados |
-| Metodología | Secciones 5, 13 y 14 | Diseño aprobado, muestras, instrumentos y protocolo |
-| Desarrollo de la solución | Secciones 6 a 12 | Diagramas definitivos, capturas y decisiones verificadas |
-| Resultados | Plantilla de la sección 14 | Mediciones reales y evidencias reproducibles |
-| Discusión | Sección 17 | Contraste con objetivos, antecedentes y resultados |
-| Conclusiones | Derivar después de la evaluación | Respuesta a objetivos sustentada en resultados |
-| Anexos | Secciones 16 y 20 | Registro de IA, logs, configuración y materiales autorizados |
+| Clasificación | Matriz de confusión, precisión, sensibilidad y F1 por clase; falsas alarmas por tiempo | Datos de prueba independientes, ruido, dispositivos y ventanas de cinco segundos con lote uno |
+| Decisión temporal | Tiempo de inicio/cierre, omisiones, fragmentación y contexto conservado | Umbral, solapamiento e intervalo efectivo de inferencia |
+| Rendimiento | Latencia de inferencia y guardado, memoria, batería y temperatura | Modelo y hash, teléfono, versión de SO y duración de la sesión |
+| Persistencia | Tiempo de inserción, consulta y eliminación; espacio de versiones y auditoría | Cantidad de incidentes, duración del audio y capacidad libre |
+| Segundo plano | Continuidad con pantalla bloqueada, llamadas y cambios de visibilidad | Android/iOS, restricciones energéticas y permisos |
+| Seguridad local | Rechazo de alteraciones, acceso cancelado, sesión caducada y ausencia de archivos de audio en claro | Artefacto instalado y herramientas de inspección utilizadas |
+| Recuperación | Estado tras cierre real del proceso y fallos de almacenamiento | Último guardado confirmado, transacción pendiente y datos recuperados |
+| Usabilidad | Comprensión de permisos, estado del monitoreo y acciones sensibles | Protocolo, participantes, tareas y tratamiento ético de los datos |
 
-No deben redactarse conclusiones de eficacia antes de disponer de resultados. Las fuentes internas citadas aquí permiten trazabilidad del software; no sustituyen referencias científicas para el marco teórico.
+Medir Hive no implica afirmar superioridad frente a otro motor. Para sostener esa comparación habría que ejecutar cargas equivalentes bajo condiciones controladas. Tampoco se debe convertir una única ejecución sintética del modelo en un benchmark móvil o en una medida de exactitud.
 
-## 20. Fuentes internas y trazabilidad
+Los audios de evaluación deben contar con autorización y un tratamiento adecuado de datos personales. La investigación necesita definir minimización, acceso, retención, eliminación y consentimiento aplicables a su protocolo. La implementación de permisos del teléfono no sustituye esas decisiones del estudio.
 
-Las siguientes fuentes se utilizaron para describir el proyecto. Los vínculos son relativos al archivo actual.
+## 21. Correspondencia con los módulos del informe académico
 
-- [Descripción y operación del proyecto](../README.md).
-- [Dependencias, versión y assets](../pubspec.yaml).
-- [Inicialización](../lib/main.dart).
-- [Inyección de dependencias](../lib/app/service_locator.dart).
-- [Rutas y control de acceso](../lib/app/routes.dart).
-- [Navegación inferior](../lib/app/widgets/bottom_nav_bar.dart).
-- [Constantes de audio y clasificación](../lib/core/constants/app_constants.dart).
+Las siguientes descripciones sintetizan los componentes de esta versión y pueden adaptarse al apartado 5.1 del informe, manteniendo sus límites técnicos.
+
+### 21.1. Módulo de criptografía y seguridad
+
+El módulo protege mediante AES-GCM de 256 bits el audio seleccionado y los metadatos críticos de cada versión: identificadores, fechas, etiqueta predicha, confianza y ubicación autorizada. El contenedor vincula audio y metadatos mediante datos autenticados adicionales y conserva nonces y etiquetas para verificar el descifrado. SHA-256 se utiliza como comprobación complementaria del audio cifrado y como resumen técnico de contenedores y eventos.
+
+La clave maestra se conserva protegida por el almacenamiento seguro del sistema operativo mediante `flutter_secure_storage`. No se persiste deliberadamente en texto plano y se recupera en memoria para las operaciones necesarias. Los nonces se generan de forma aleatoria por operación de cifrado. Estos mecanismos aportan confidencialidad e integridad local, sin certificar autoría, inmutabilidad ni validez jurídica.
+
+### 21.2. Módulo de almacenamiento local
+
+El módulo utiliza Hive para conservar objetos con audio y metadatos cifrados. Los registros se actualizan mediante versiones y puntos de recuperación; una auditoría cifrada y un diario transaccional permiten verificar coherencia y recuperar escrituras aceptadas que quedaron incompletas. Los formatos anteriores se migran después de comprobar su audio, sin atribuir autenticidad retrospectiva a sus metadatos previos.
+
+Fuera de un incidente activo, las ventanas con decisión negativa no generan registros de evidencia ni archivos de audio y son reemplazadas en memoria por muestras posteriores. Durante un incidente se incluyen las muestras hasta la primera decisión negativa de cierre. Los incidentes se conservan hasta eliminación manual, con controles de espacio y sin prometer borrado forense. El rendimiento y consumo de almacenamiento deben medirse experimentalmente.
+
+### 21.3. Módulo de presentación e interfaz
+
+El módulo permite consultar, escuchar y eliminar incidentes dentro de controles locales de acceso. La app admite biometría o credenciales del dispositivo y establece cinco minutos de inactividad de sesión. Exige autenticación adicional al entrar a grabaciones, abrir cada audio, confirmar una eliminación y modificar el monitoreo desde su configuración.
+
+La reproducción descifra el audio después de autenticar y construye el WAV en memoria volátil, sin crear deliberadamente archivos temporales legibles. Los búferes propios se limpian al finalizar su uso, sin garantizar la eliminación absoluta de copias internas del runtime o del sistema operativo. Estas funciones no constituyen un sistema de custodia forense.
+
+## 22. Límites de las afirmaciones y cierre documental
+
+La versión descrita implementa procesamiento local, selección temporal de audio, protección criptográfica y funciones de consulta controladas. Su verificación actual combina pruebas automatizadas y una comprobación sintética del archivo del modelo. Permanece pendiente instalar y evaluar un nuevo artefacto móvil que incluya todos los cambios descritos.
+
+El informe final no debe afirmar detección infalible de violencia, vigilancia ininterrumpida, ausencia de toda escritura en disco, unicidad matemática de nonces, custodia de claves necesariamente no exportables, borrado irrecuperable ni ausencia absoluta de copias en memoria. Tampoco debe presentar el cifrado o la auditoría como una acreditación de autoría o admisibilidad de la grabación.
+
+Para adjuntar este documento a la investigación deben conservarse la versión de código efectivamente evaluada, hash del modelo, artefacto instalado, versiones de herramientas y resultados experimentales. Las capturas de pantalla y conclusiones deben corresponder a ese mismo artefacto. Si se modifica el umbral, contrato del modelo, política de cierre o almacenamiento, deben actualizarse los apartados asociados.
+
+Este texto fue elaborado con asistencia de un agente de inteligencia artificial mediante revisión del repositorio. El autor de la investigación debe contrastarlo, adaptarlo al formato de su institución y declarar el uso de esa asistencia según sus disposiciones. La asistencia documental no constituye evidencia de desempeño ni sustituye la responsabilidad del autor sobre las afirmaciones incorporadas al informe.
+
+## 23. Documentos y fuentes complementarias
+
+- [Dependencias y recursos de la aplicación](../pubspec.yaml).
+- [Inicialización y arranque](../lib/main.dart).
+- [Registro de dependencias](../lib/app/service_locator.dart).
+- [Constantes del prototipo](../lib/core/constants/app_constants.dart).
 - [Política de evidencias](../lib/core/constants/evidence_policy.dart).
-- [Normalización de señal](../lib/core/dsp/signal_normalizer.dart).
-- [Buffer circular](../lib/core/dsp/audio_buffer_manager.dart).
-- [Captura de audio](../lib/features/audio_monitoring/data/datasources/audio_stream_datasource.dart).
-- [Construcción de ventanas](../lib/features/audio_monitoring/data/repositories/monitoring_repository_impl.dart).
-- [Motor de inferencia](../lib/features/audio_monitoring/data/datasources/tflite_inference_engine.dart).
-- [Controlador de monitoreo](../lib/features/audio_monitoring/presentation/controllers/monitoring_controller.dart).
-- [Formación de incidentes](../lib/features/audio_monitoring/presentation/controllers/incident_recording.dart).
-- [Servicio de monitoreo](../lib/core/services/monitoring_foreground_service.dart).
-- [Cifrado](../lib/core/crypto/cipher_manager.dart).
-- [Gestión de claves](../lib/core/crypto/secure_key_storage.dart).
-- [Persistencia y auditoría](../lib/features/evidence_vault/data/datasources/evidence_local_datasource.dart).
-- [Diario del servicio](../lib/features/evidence_vault/data/datasources/background_evidence_journal.dart).
-- [Autenticación](../lib/features/auth/presentation/screens/auth_screen.dart).
-- [Sesión](../lib/core/services/session_manager.dart).
-- [Exportación del modelo](../tool/export_wav2vec_tflite.py).
-- [Alineación del runtime iOS](../tool/align_tflite_ios_podspec.rb).
-- [Configuración de CocoaPods](../ios/Podfile).
+- [Protección, identificadores y migración](privacy-and-encryption.md).
+- [Integridad, auditoría y recuperación](evidence-integrity.md).
+- [Capacidad, retención y eliminación](evidence-retention.md).
+- [Contrato original del modelo mixto](mobile-model-contract.json).
+- [Integración y resultados sintéticos del modelo](mobile-model-integration.md).
+- [Pruebas de criptografía](../test/core/crypto/).
+- [Pruebas de monitoreo e inferencia](../test/features/audio_monitoring/).
+- [Pruebas de almacenamiento e interfaz de grabaciones](../test/features/evidence_vault/).
+- [Pruebas de control del monitoreo](../test/app/monitoring_access_controller_test.dart).
 - [Compilación y empaquetado iOS](../codemagic.yaml).
-- [Integridad y sus límites](evidence-integrity.md).
-- [Retención y capacidad](evidence-retention.md).
 
-Para cerrar una versión académica reproducible, añadir el identificador de commit, hash del modelo, versiones resueltas y anexos experimentales correspondientes al prototipo efectivamente evaluado.
+Las referencias de cada módulo permiten rastrear sus afirmaciones al código. No sustituyen el marco teórico ni las referencias científicas que correspondan a la investigación.

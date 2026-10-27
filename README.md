@@ -1,90 +1,102 @@
 # Serene
 
-Serene is a Flutter app for passive audio monitoring and encrypted evidence
-storage.
+Serene es un prototipo Flutter para monitorear audio ambiental, ejecutar clasificación local de tres categorías y conservar incidentes mediante cifrado autenticado. Las etiquetas del modelo son `no_violence`, `physical_violence` y `verbal_violence`; son predicciones acústicas y no una constatación independiente de violencia.
 
-## Mobile setup
+**Documentación actualizada el 27 de octubre de 2026.**
 
-Run `flutter pub get` before building. Android requests microphone permission
-for monitoring and notification permission so its foreground service can show
-the persistent monitoring notification. Location is requested only when an
-incident is saved; an evidence record has no coordinates if location is
-unavailable or permission is denied. If microphone or notification access is
-denied, enable it in the device's app settings and reopen Serene.
+## Documentación para la investigación
 
-Monitoring begins after microphone permission has been granted. Android runs
-capture, inference and encrypted checkpoints in the microphone foreground
-service with a persistent notification and a Stop button. Removing the UI from
-recent apps does not intentionally stop that service. iOS keeps an active audio
-session while backgrounded/locked, with the audio background mode enabled.
-Recording pauses/resumes around supported audio interruptions. Forced stops,
-revoked permissions and operating-system termination can still stop monitoring;
-it is not an always-on guarantee and does not restart the microphone at boot.
+El documento principal es [Descripción técnica de los módulos implementados](docs/informe-tecnico-tesis.md). Describe la arquitectura, responsabilidades e implementación de cada módulo, flujo de datos, parámetros, pruebas realizadas y evaluación pendiente. Incluye textos adaptables a los apartados de criptografía, almacenamiento e interfaz del informe académico.
 
-The model evaluates overlapping five-second audio windows. A positive detection
-starts one incident including that trigger window. Only new PCM samples are
-appended, so overlaps are not duplicated. Three seconds of negative decisions
-close the incident, allowing brief fluctuations. The first window and every
-15 seconds of additional audio are encrypted as checkpoints with the same ID;
-the final checkpoint replaces that record, instead of creating isolated clips.
-Manual stop persists an open incident. Abrupt termination can lose audio since
-the most recent successful checkpoint. Slow devices adapt inference frequency
-while retaining the audio; a bounded processing queue reports overload rather
-than silently dropping audio.
+Documentos complementarios:
 
-Android writes only encrypted evidence to an atomic background journal. The UI
-imports it into Hive when available or after reopening; the service never opens
-Hive concurrently with the UI engine. GPS is optional and acquired once per
-incident; the background worker does not show location permission dialogs.
-The highest-confidence violence prediction supplies the incident label/score.
+- [Protección de datos, claves y migración](docs/privacy-and-encryption.md).
+- [Auditoría, integridad y recuperación](docs/evidence-integrity.md).
+- [Retención, capacidad y eliminación](docs/evidence-retention.md).
+- [Integración del modelo y prueba sintética](docs/mobile-model-integration.md).
+- [Contrato del modelo mixto](docs/mobile-model-contract.json).
 
-For iOS builds (including Codemagic), run `flutter pub get`, then
-`ruby tool/align_tflite_ios_podspec.rb` from the repository root, followed by
-`pod update TensorFlowLiteSwift TensorFlowLiteC --repo-update` in `ios`.
-The script changes the plugin's CocoaPods dependency to TensorFlow Lite 2.17.0.
-Codemagic checks that both pods resolve to exactly 2.17.0 before building.
-iOS builds cannot be produced on Windows.
+## Funcionamiento actual
 
-The current bundled model contains built-in operators, including FULLY_CONNECTED
-version 12; it does not contain FlexErf. iOS therefore uses the standard runtime
-without TensorFlowLiteSelectTfOps or Flex linker flags. Android also loads this model without an Activity-owned Flex delegate,
-so inference works from the service engine.
+La captura utiliza PCM16 mono a 16 kHz. El análisis utiliza ventanas de cinco segundos, con un avance nominal de un segundo. La aplicación convierte el PCM a flotantes en `[-1,1]` y conserva las muestras recientes en un búfer circular.
 
-## Model export
+Una decisión de violencia con confianza de al menos 0,60 inicia un incidente e incluye la ventana que produjo la alerta. Las ventanas siguientes aportan únicamente sus muestras nuevas, sin duplicar los segmentos superpuestos. Se incluye la primera ventana con decisión negativa y se cierra el incidente. Una decisión negativa también puede corresponder a una etiqueta de violencia por debajo del umbral; las ventanas exactamente nulas no se envían al modelo.
 
-```sh
-python tool/export_wav2vec_tflite.py final_models/best_wav2vec.pt
+El incidente se guarda inicialmente, cada quince segundos nuevos y al finalizar. Cada guardado crea una versión cifrada completa; la interfaz muestra la última versión de cada incidente. No existe límite predeterminado de duración, pero la memoria y el almacenamiento son finitos y las versiones intermedias aumentan el espacio ocupado.
+
+Fuera de un incidente no se crean archivos de audio ni registros de evidencia para ventanas negativas. Esto no significa ausencia de toda escritura: preferencias y datos técnicos de recursos también se persisten.
+
+## Acceso, micrófono y reproducción
+
+El acceso inicial utiliza biometría o credenciales del dispositivo. La sesión caduca tras cinco minutos de inactividad y se cierra al pasar la interfaz a segundo plano, salvo durante un diálogo de autenticación registrado. La captura activa y la sesión de interfaz se controlan por separado.
+
+Configuración permite activar o desactivar el monitoreo con una autenticación nueva. Cada activación vuelve a comprobar el permiso del micrófono, lo solicita cuando es posible o permite abrir los ajustes del dispositivo. La desactivación se conserva entre aperturas. La preferencia predeterminada es activada y el arranque intenta iniciar la captura solo si esa configuración y los permisos lo permiten.
+
+Entrar a la lista de grabaciones, escuchar cada audio y confirmar una eliminación requieren autenticación adicional. Cancelar no permite consultar, descifrar o eliminar mediante esos flujos. La reproducción construye PCM/WAV en memoria y utiliza `StreamAudioSource`, sin crear deliberadamente un archivo temporal legible. Se limpian los búferes controlados por la app, sin prometer eliminación de todas las copias del runtime o del sistema operativo.
+
+## Protección y almacenamiento
+
+El audio y los metadatos críticos se cifran con AES-256-GCM antes de persistirse. Los metadatos se vinculan al audio mediante AAD y se protegen en un sobre cifrado separado. Los identificadores lógicos quedan cifrados; la persistencia utiliza una referencia técnica aleatoria independiente. Se conserva SHA-256 del audio cifrado como comprobación complementaria.
+
+La clave maestra y la referencia final de la auditoría se conservan mediante `flutter_secure_storage`. Hive almacena objetos con campos protegidos; no se cifra todo el archivo de base de datos. Las escrituras emplean auditoría cifrada y un WAL recuperable. Los formatos antiguos se migran después de verificar el audio, sin acreditar retrospectivamente sus metadatos anteriores.
+
+Los incidentes se conservan hasta su eliminación manual. El borrado retira todas sus versiones activas, registra el evento y solicita compactación. No se promete borrado forense, autoría certificada, inmutabilidad del sistema de archivos ni validez jurídica. El control de espacio no elimina incidentes para admitir nuevas grabaciones.
+
+## Modelo desplegado
+
+El modelo actual es el artefacto mixto cuyo SHA-256 es:
+
+```text
+f5b94431cada8c946f3c3d87922908740f29e99882abefe22ec70dfff6df693d
 ```
 
-The only input is a PyTorch state_dict checkpoint for Wav2Vec2-base with three
-classes. The architecture uses `facebook/wav2vec2-base` (downloaded or cached),
-not architecture inferred from arbitrary weights. Use TensorFlow 2.17.x and
-compatible PyTorch, Transformers, ONNX and onnx2tf dependencies.
+El motor redimensiona las dos entradas dinámicas antes de la inferencia móvil:
 
-The script writes `model.tflite` and `model.report.json` in the current working
-directory. It uses dynamic range quantization with INT8 weights and float32
-input/output `[1, 80000]` / `[1, 3]`. Runtime kernels may dynamically quantize
-activations; this is not calibrated full-integer quantization. No audio or label
-files are required, and synthetic inputs are not used for calibration.
+| Tensor | Datos |
+| --- | --- |
+| `pcm` | float32 `[1,80000]`, mono a 16 kHz |
+| `valid_samples` | int32 `[1]`, contenido `[80000]` |
+| Probabilidades | float32 `[1,3]`, en el orden de `assets/labels/labels.txt` |
 
-The script checks built-in operators, tensor shapes/types, INT8 weights attached
-to compute operations, file size reduction and TensorFlow 2.17 inference. It
-compares float32 conversion against the PyTorch GELU approximation and reports
-synthetic differences against a reference using the base training configuration.
-These checks do not measure accuracy on real audio; the checkpoint alone cannot
-provide the original training configuration, calibration data or labeled tests.
-The report marks real accuracy as unvalidated. The existing output model is
-preserved if validation fails. Copy a successful `model.tflite` into
-`assets/models/model.tflite` before building the Codemagic IPA.
+La normalización estadística y softmax están incluidos en el grafo. La aplicación no los repite. La forma inicial `[1,1]` es una dimensión dinámica y no implica que el modelo solo acepte una muestra.
 
-Export changes both feature-extractor and hidden activations to `gelu_fast`,
-exports ONNX opset 14 and checks float32 conversion against that PyTorch variant
-with absolute and relative tolerances of `1e-3`. The three synthetic windows are
-silence, uniform noise and a 440 Hz sine wave. The report includes class agreement
-and logit MAE against the assumed original configuration and float32 conversion.
-Acceptance requires size reduction after the structural and execution checks;
-there is no acceptance threshold for INT8 agreement or logit error. A successful
-export therefore does not establish predictive equivalence or real accuracy.
+`tool/export_wav2vec_tflite.py` es una herramienta anterior para un checkpoint Wav2Vec2-base, con entrada única fija y salida de logits. No debe utilizarse para reemplazar automáticamente el modelo mixto actual sin adaptar y validar su contrato.
 
-Check that training class indices match `assets/labels/labels.txt`:
-0 = no_violence, 1 = physical_violence, 2 = verbal_violence.
+## Ejecución móvil y compilación
+
+Preparar las dependencias Flutter antes de compilar:
+
+```sh
+flutter pub get
+```
+
+Android utiliza un servicio de micrófono con notificación persistente. El servicio escribe contenedores cifrados en un diario de transferencia y la interfaz los importa mediante el escritor de Hive. No abre la caja de evidencias concurrentemente desde ambos motores. La acción de detener de la notificación es distinta del cambio autenticado y persistente de Configuración. No se configura arranque automático del micrófono al encender el dispositivo.
+
+iOS declara el modo de audio en segundo plano y utiliza una sesión de audio activa. Bloqueo, llamadas, permisos revocados y terminación del proceso pueden interrumpirla. El comportamiento debe probarse en un iPhone real; no hay garantía de monitoreo ininterrumpido.
+
+Para el flujo iOS con CocoaPods, ejecutar desde la raíz después de obtener dependencias:
+
+```sh
+ruby tool/align_tflite_ios_podspec.rb
+```
+
+El script alinea el plugin con TensorFlow Lite 2.17.0. En un entorno macOS/Xcode, después de generar la configuración Flutter correspondiente, el flujo de [Codemagic](codemagic.yaml) actualiza y comprueba `TensorFlowLiteSwift` y `TensorFlowLiteC`, compila sin firma y empaqueta `serene-unsigned.ipa`. La firma y distribución son pasos adicionales. No se puede compilar iOS nativamente desde Windows.
+
+En Android la configuración actual de release utiliza la firma de depuración. El repositorio describe un prototipo; no acredita una publicación de producción. Es necesario instalar una compilación nueva para verificar los cambios de esta versión.
+
+## Verificación
+
+```sh
+flutter test --no-pub
+flutter analyze --no-pub
+```
+
+El 27 de octubre de 2026 finalizaron correctamente **159 pruebas**. Incluyen señal, contrato del intérprete simulado, incidentes, criptografía, auditoría, recuperación, migración, acceso, eliminación y limpieza de búferes de reproducción. El resultado no sustituye la validación nativa del dispositivo.
+
+Para ejecutar el archivo real del modelo con señales sintéticas de cinco segundos y lote uno, en un entorno con TensorFlow y NumPy:
+
+```sh
+python -B tool/check_mobile_model.py
+```
+
+La prueba registrada ejecutó tres señales en el equipo, pero no demuestra calidad con audio real. El silencio absoluto produjo un falso positivo sintético de violencia física; la app omite ventanas exactamente nulas, lo que no resuelve la evaluación de ruido o silencio de micrófono. Siguen pendientes calidad predictiva, latencia, consumo, continuidad y pruebas de la nueva compilación en teléfonos, además de la verificación específica del temporizador de inactividad.
