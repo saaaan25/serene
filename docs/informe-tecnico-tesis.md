@@ -185,9 +185,9 @@ El arranque programa el inicio del monitoreo después del primer frame. La auten
 | Duración de ventana | 5 segundos | `AppConstants.windowDurationSeconds` |
 | Muestras por ventana | 80 000 | `AppConstants.expectedSampleCount` |
 | Avance nominal | 1 segundo tras completar la primera ventana | Repositorio de monitoreo |
-| Entrada del modelo | `float32 [1, 80000]` | Validación del motor |
+| Entradas del modelo mixto | PCM `float32 [1, 80000]` y longitudes `int32 [1]` con valor `[80000]` | Contrato móvil y motor |
 | Salida esperada con las etiquetas actuales | `float32 [1, 3]` | Motor y archivo de etiquetas |
-| Umbral de decisión | 0,90 | `AppConstants.classificationThreshold` |
+| Umbral de decisión | 0,60 | `AppConstants.classificationThreshold` |
 | Hilos configurados del intérprete | Dos | `TfliteInferenceEngine.initialize` |
 
 El avance nominal produce ventanas superpuestas. El controlador adapta la frecuencia de inferencia en dispositivos lentos, por lo que no debe asumirse una predicción por segundo bajo toda condición de carga.
@@ -205,17 +205,19 @@ N = frecuencia × duración = 16 000 × 5 = 80 000 muestras
 
 ### 7.3. Decisión del clasificador
 
-El motor valida tipos y dimensiones, ejecuta el intérprete y aplica softmax a los valores de salida. Selecciona la etiqueta con mayor puntuación y considera positiva una ventana cuando:
+El motor valida nombres, tipos y dimensiones de PCM y longitudes, redimensiona las entradas dinámicas y ejecuta el intérprete. La normalización estadística y softmax están incluidos en el modelo mixto; la app utiliza sus probabilidades sin aplicar otro softmax. Selecciona la etiqueta con mayor puntuación y considera positiva una ventana cuando:
 
 ```text
-clase_predicha != no_violence Y puntuación_máxima >= 0,90
+clase_predicha != no_violence Y puntuación_máxima >= 0,60
 ```
 
 El orden esperado es `0 = no_violence`, `1 = physical_violence` y `2 = verbal_violence`. El orden del entrenamiento y el de `labels.txt` deben coincidir.
 
-La puntuación softmax no constituye una probabilidad calibrada de que un hecho real haya ocurrido. El umbral de 0,90 es una configuración del prototipo; su idoneidad debe evaluarse mediante datos independientes.
+La puntuación softmax no constituye una probabilidad calibrada de que un hecho real haya ocurrido. El umbral de 0,60 es una configuración del prototipo; su idoneidad debe evaluarse mediante datos independientes.
 
 ### 7.4. Procedencia y exportación del modelo
+
+El modelo mixto actualmente empaquetado tiene dos entradas dinámicas y devuelve probabilidades. Su integración y la prueba de ejecución con ventanas de cinco segundos y lote uno se documentan en [mobile-model-integration.md](mobile-model-integration.md). La herramienta descrita a continuación utiliza un contrato anterior de entrada única y logits; no debe confundirse con la procedencia del modelo mixto ni sustituirlo automáticamente.
 
 El repositorio incluye `tool/export_wav2vec_tflite.py`. La herramienta recibe como único argumento un checkpoint `state_dict` de una arquitectura Wav2Vec2-base con tres clases, basada en `facebook/wav2vec2-base`. Carga los pesos en CPU con `weights_only=True` y exige coincidencia estricta de claves. La arquitectura no se infiere de pesos arbitrarios; su configuración se obtiene de Transformers, mediante descarga o caché. El script exige TensorFlow 2.17.x.
 
@@ -246,13 +248,13 @@ Las comprobaciones sintéticas de conversión verifican aspectos técnicos y dif
 
 ## 8. Formación y conservación de incidentes
 
-Una ventana positiva inicia un incidente e incluye el audio de esa ventana. Las ventanas posteriores se incorporan mediante las muestras nuevas para evitar duplicar el tramo superpuesto. Una secuencia equivalente a tres segundos de decisiones negativas cierra el incidente, tolerando fluctuaciones breves del clasificador.
+Una ventana positiva inicia un incidente e incluye el audio de esa ventana. Se agregan solo las muestras nuevas de las ventanas posteriores para evitar duplicar el solapamiento. Se incluye la primera ventana negativa y se cierra el incidente.
 
 El primer segmento se guarda como checkpoint y se realizan nuevos checkpoints cada 15 segundos adicionales de audio. El cierre produce una versión final del mismo incidente. La bóveda muestra la versión más reciente; el almacén conserva versiones anteriores hasta eliminar el incidente. Por ello, reemplazar la representación visible no significa sobrescribir todo el historial persistido.
 
 La etiqueta y puntuación representativas corresponden a la predicción positiva de mayor confianza. La ubicación es opcional y se intenta obtener una vez por incidente; la ausencia de permiso o disponibilidad permite conservar un registro sin coordenadas.
 
-La política limita cada incidente a cinco minutos. Si la actividad continúa, se generan registros consecutivos con identificadores distintos. Detener manualmente el monitoreo conserva un incidente abierto; una terminación abrupta puede perder las muestras posteriores al último checkpoint confirmado.
+No hay limite predeterminado de duracion por incidente. Detener manualmente el monitoreo conserva el incidente abierto; una terminacion abrupta puede perder las muestras posteriores al ultimo checkpoint confirmado.
 
 ## 9. Persistencia, seguridad y trazabilidad
 
@@ -262,11 +264,11 @@ La política limita cada incidente a cinco minutos. Si la actividad continúa, s
 
 En el esquema 2, los metadatos incluyen identificadores de incidente y versión, fecha de inicio y guardado UTC, versión anterior, etiqueta, puntuación, GPS opcional, versión de la aplicación, hash SHA-256 del modelo y formato PCM. Se serializan como JSON canónico y se utilizan como AAD del audio. Un sobre cifrado adicional protege los metadatos en reposo.
 
-Hive y el diario del servicio conservan representaciones cifradas, nonces, tags e identificadores necesarios. Los metadatos se reconstruyen en memoria después de verificarlos. Los registros antiguos mantienen compatibilidad y se identifican como legacy; no reciben retroactivamente las garantías de autenticación del esquema nuevo.
+Hive y el diario del servicio conservan representaciones cifradas, nonces, tags, el SHA-256 complementario del audio cifrado y una referencia técnica aleatoria independiente del identificador lógico. Los metadatos se reconstruyen en memoria después de verificarlos. Los formatos anteriores se migran mediante una transacción recuperable, verificando el audio antes de sustituirlo. La migración no autentica retrospectivamente sus metadatos anteriores.
 
 ### 9.2. Auditoría local
 
-El historial registra operaciones `create`, `new_version`, `delete` y `legacy_import`. Los eventos contienen secuencia, identificadores, digests y enlace con el hash anterior. Su contenido está cifrado y autenticado. La referencia final de la cadena se conserva en almacenamiento seguro, separada de Hive.
+El historial registra operaciones `create`, `new_version`, `delete`, `legacy_import` y `privacy_migration`. Los eventos contienen secuencia, identificadores, digests y enlace con el hash anterior. Su contenido está cifrado y autenticado. La referencia final de la cadena se conserva en almacenamiento seguro, separada de Hive.
 
 La reproducción verifica nuevamente la persistencia y auditoría antes del descifrado. Una alteración que rompa estas verificaciones debe producir un error, no una reconstrucción silenciosa de la cadena.
 
@@ -302,7 +304,6 @@ La navegación principal contiene Inicio, Bóveda y Configuración. `BottomNavBa
 
 La autenticación usa `local_auth` con `biometricOnly: false`; puede utilizar biometría o credenciales del dispositivo según soporte y configuración. No debe describirse como acceso exclusivamente biométrico. `SessionManager` define un vencimiento de cinco minutos por inactividad.
 
-Las preferencias persisten en Hive e incluyen idioma español o inglés y modo oscuro o claro. El repositorio contiene componentes y pruebas relacionados con camuflaje de la bóveda. La discreción visual debe evaluarse como comportamiento de interfaz, sin presentarse como una garantía criptográfica adicional.
 
 ## 12. Ejecución móvil y herramientas
 

@@ -81,7 +81,7 @@ class EvidenceRecordModel extends HiveObject {
 
   factory EvidenceRecordModel.fromEntity(EvidenceRecord entity) {
     return EvidenceRecordModel(
-      id: entity.id,
+      id: entity.storageId.isEmpty ? entity.id : entity.storageId,
       timestamp: entity.timestamp,
       predictionLabel: entity.predictionLabel,
       confidenceScore: entity.confidenceScore,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../support/memory_evidence_keys.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -102,6 +103,18 @@ void main() {
     expect(savedRecord.encryptedAudioBlob, isNot(equals(rawPcmAudio)));
     expect(savedRecord.hasAuthenticatedMetadata, isTrue);
     expect(savedRecord.modelHash, 'test-model-sha256');
+    expect(savedRecord.storageId, isNot(savedRecord.id));
+    expect(savedRecord.integrityHash, hasLength(64));
+    final persisted = (await localDataSource.fetchAllRecords()).single;
+    expect(persisted.id, savedRecord.storageId);
+    expect(persisted.id, isNot(savedRecord.id));
+    final box = Hive.box<EvidenceRecordModel>(
+      HiveConstants.encryptedEvidenceBox,
+    );
+    await box.flush();
+    final onDisk = await File(box.path!).readAsString(encoding: latin1);
+    expect(onDisk, isNot(contains(savedRecord.id)));
+    expect(onDisk, isNot(contains(savedRecord.incidentId)));
 
     // Decrypt the audio data and verify it matches the original raw PCM audio
     final decryptedPcm = await getUseCase(savedRecord);

@@ -25,7 +25,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   IncidentRecording? _incident;
   int? _continuationEndSample;
   bool _storageBlocked = false;
-  final Duration maximumIncidentDuration;
+  final Duration? maximumIncidentDuration;
   Future<void> _windowWork = Future.value();
   int _queuedWindows = 0;
   StreamSubscription<Map<String, dynamic>>? _serviceSubscription;
@@ -268,11 +268,16 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     _retryTimer?.cancel();
     ++_startGeneration;
     if (_status != MonitoringStatus.active &&
-        _status != MonitoringStatus.error) {
+        _status != MonitoringStatus.error &&
+        _status != MonitoringStatus.initializing) {
       return;
     }
 
     try {
+      // A settings toggle may cancel startup while native resources are pending.
+      // Wait for that generation to finish before reporting the microphone off.
+      final starting = _startFuture;
+      if (starting != null) await starting;
       await _stopResources();
       _status = MonitoringStatus.paused;
       _errorMessage = null;
@@ -364,6 +369,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         } else if (incident.shouldClose) {
           await _saveIncident(incident);
           _incident = null;
+          incident.discard();
         } else if (incident.checkpointDue) {
           await _saveIncident(incident);
         }
@@ -395,7 +401,6 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       ),
     );
     incident.markCheckpoint();
-    debugPrint('Saved incident ${incident.id}: ${incident.length} PCM bytes');
   }
 
   bool _containsSignal(Float32List samples) {

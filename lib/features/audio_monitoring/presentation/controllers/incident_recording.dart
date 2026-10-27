@@ -11,7 +11,7 @@ import '../../domain/entities/inference_result.dart';
 class IncidentRecording {
   final String id;
   final DateTime startedAt;
-  final Duration maximumDuration;
+  final Duration? maximumDuration;
   final BytesBuilder _audio = BytesBuilder(copy: true);
   String label;
   double confidence;
@@ -38,7 +38,8 @@ class IncidentRecording {
        confidence = result.confidence,
        _lastEndSample =
            window.endSampleIndex ?? window.rawPcmBytes.length ~/ 2 {
-    if (maximumDuration.inSeconds < AppConstants.windowDurationSeconds) {
+    if (maximumDuration != null &&
+        maximumDuration!.inSeconds < AppConstants.windowDurationSeconds) {
       throw ArgumentError(
         'An incident must accommodate the initial audio window',
       );
@@ -66,16 +67,20 @@ class IncidentRecording {
   int get length => _audio.length;
   int get endSampleIndex => _lastEndSample;
   bool get durationLimitReached =>
+      maximumDuration != null &&
       length >=
-      maximumDuration.inMicroseconds * AppConstants.sampleRate * 2 ~/ 1000000;
+          maximumDuration!.inMicroseconds *
+              AppConstants.sampleRate *
+              2 ~/
+              1000000;
   Uint8List snapshot() => _audio.toBytes();
   void discard() {
     final bytes = _audio.takeBytes();
     bytes.fillRange(0, bytes.length, 0);
   }
 
-  /// Ends after three seconds of negative decisions, bridging short fluctuations.
-  bool get shouldClose => _quietSamples >= AppConstants.sampleRate * 3;
+  /// Include the first negative window, then close this incident.
+  bool get shouldClose => _quietSamples > 0;
   bool get checkpointDue => _checkpointSamples >= AppConstants.sampleRate * 15;
   void markCheckpoint() => _checkpointSamples = 0;
 
@@ -87,13 +92,14 @@ class IncidentRecording {
     if (newSamples * 2 > window.rawPcmBytes.length) {
       throw StateError('Audio gap detected while recording an incident');
     }
-    final remaining =
-        (maximumDuration.inMicroseconds *
-                AppConstants.sampleRate *
-                2 ~/
-                1000000 -
-            length) ~/
-        2;
+    final remaining = maximumDuration == null
+        ? newSamples
+        : (maximumDuration!.inMicroseconds *
+                      AppConstants.sampleRate *
+                      2 ~/
+                      1000000 -
+                  length) ~/
+              2;
     final retainedSamples = newSamples < remaining ? newSamples : remaining;
     if (retainedSamples <= 0) return;
     final offset = window.rawPcmBytes.length - newSamples * 2;

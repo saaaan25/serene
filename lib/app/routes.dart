@@ -11,6 +11,7 @@ import 'package:serene/core/services/session_manager.dart';
 import 'package:serene/app/controllers/app_settings_controller.dart';
 import 'package:serene/core/localization/app_translations.dart';
 import 'package:provider/provider.dart';
+import '../features/evidence_vault/presentation/widgets/vault_access_gate.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -75,7 +76,7 @@ GoRouter createRouter(SessionManager sessionManager) {
                 name: 'vault',
                 pageBuilder: (context, state) => MaterialPage<void>(
                   key: state.pageKey,
-                  child: const VaultScreen(),
+                  child: VaultAccessGate(builder: (_) => const VaultScreen()),
                 ),
               ),
             ],

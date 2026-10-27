@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
+import '../../../../app/controllers/monitoring_access_controller.dart';
 import '../../../../app/widgets/serene_app_bar.dart';
 import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/localization/app_translations.dart';
@@ -69,39 +69,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _retryMonitoring() async {
-    try {
-      var permission = await Permission.microphone.status;
-      if (permission.isPermanentlyDenied || permission.isRestricted) {
-        final opened = await openAppSettings();
-        if (!opened && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppTranslations.tr(
-                  'home_monitoring_settings_error',
-                  context.read<AppSettingsController>().locale,
-                ),
-              ),
-            ),
-          );
-        }
-        return;
-      }
-
-      if (!permission.isGranted) {
-        permission = await Permission.microphone.request();
-      }
-      if (permission.isGranted && mounted) {
-        await context.read<MonitoringController>().startMonitoring();
-      }
-    } catch (error) {
-      debugPrint('Unable to request microphone permission: $error');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
+    final access = context.read<MonitoringAccessController>();
+    final locale = context.read<AppSettingsController>().locale;
+    String t(String key) => AppTranslations.tr(key, locale);
+    final message = await access.changeEnabled(
+      true,
+      t('monitoring_auth_reason'),
+    );
+    if (!mounted || message == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(t(message)),
+        action: message == 'monitoring_permission_settings'
+            ? SnackBarAction(
+                label: t('monitoring_open_settings'),
+                onPressed: () async {
+                  await access.microphone.openSettings();
+                },
+              )
+            : null,
+      ),
+    );
   }
 
   @override

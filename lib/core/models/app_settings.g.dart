@@ -13,16 +13,19 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
     return AppSettings(
       isDarkMode: fields[0] as bool? ?? true,
       locale: fields[1] as String? ?? 'es',
+      monitoringEnabled: fields[2] as bool? ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettings obj) {
-    writer.writeByte(2);
+    writer.writeByte(3);
     writer.writeByte(0);
     writer.write(obj.isDarkMode);
     writer.writeByte(1);
     writer.write(obj.locale);
+    writer.writeByte(2);
+    writer.write(obj.monitoringEnabled);
   }
 
   @override

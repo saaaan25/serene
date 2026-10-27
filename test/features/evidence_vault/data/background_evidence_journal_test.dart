@@ -87,7 +87,7 @@ void main() {
       final visible = await repository.getAllEvidenceRecords();
       expect((await source.fetchAllRecords()).length, 2);
       expect(visible.single.logicalIncidentId, 'old-incident');
-      expect(visible.single.hasAuthenticatedMetadata, isFalse);
+      expect(visible.single.hasAuthenticatedMetadata, isTrue);
       expect(
         (await repository.getDecryptedAudioBytes(visible.single)).length,
         300,

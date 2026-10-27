@@ -9,6 +9,8 @@ import '../../../../core/errors/failures.dart';
 import '../../../../core/services/evidence_storage_guard.dart';
 import '../models/evidence_envelope.dart';
 import '../models/evidence_record_model.dart';
+import '../../domain/entities/evidence_record.dart';
+import 'dart:typed_data';
 import 'background_evidence_journal.dart';
 import 'evidence_audit_store.dart';
 
@@ -73,7 +75,77 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
         return opened.savedAt ?? opened.timestamp;
       },
     );
+    await _migrateLegacy(audit);
     return audit;
+  }
+
+  Future<void> _migrateLegacy(EvidenceAuditStore audit) async {
+    final codec = EvidenceEnvelope(cipher);
+    for (final old in audit.records.values.toList()) {
+      final record = await codec.open(old, audit.key);
+      if (record.schemaVersion == 2 &&
+          record.storageId.isNotEmpty &&
+          record.integrityHash.isNotEmpty) {
+        continue;
+      }
+      final audio = await cipher.decryptInMemory(
+        cipherBytes: old.encryptedAudioBlob,
+        ivBytes: old.ivBytes,
+        authTag: old.authTag,
+        secretKey: audit.key,
+        aad: old.schemaVersion == 1
+            ? const []
+            : EvidenceEnvelope.metadataBytes(record),
+      );
+      try {
+        final metadata = EvidenceRecord(
+          id: record.id,
+          incidentId: record.logicalIncidentId,
+          schemaVersion: 2,
+          timestamp: record.timestamp,
+          savedAt: record.savedAt ?? record.timestamp,
+          predictionLabel: record.predictionLabel,
+          confidenceScore: record.confidenceScore,
+          gpsCoordinates: record.gpsCoordinates,
+          previousVersionId: record.previousVersionId,
+          appVersion: record.appVersion,
+          modelHash: record.modelHash,
+          audioFormat: record.audioFormat,
+          encryptedAudioBlob: Uint8List(0),
+          ivBytes: Uint8List(0),
+          authTag: Uint8List(0),
+          integrityHash: '',
+        );
+        final sealed = await codec.seal(
+          metadataRecord: metadata,
+          audio: audio,
+          key: audit.key,
+        );
+        // Authenticate both new blocks before committing the replacement.
+        final verified = await codec.open(sealed, audit.key);
+        final check = await cipher.decryptInMemory(
+          cipherBytes: sealed.encryptedAudioBlob,
+          ivBytes: sealed.ivBytes,
+          authTag: sealed.authTag,
+          secretKey: audit.key,
+          aad: EvidenceEnvelope.metadataBytes(verified),
+        );
+        try {
+          var matches = check.length == audio.length;
+          for (var i = 0; matches && i < audio.length; i++) {
+            matches = check[i] == audio[i];
+          }
+          if (!matches) {
+            throw const CryptoFailure('Migrated audio differs from source');
+          }
+        } finally {
+          check.fillRange(0, check.length, 0);
+        }
+        await audit.migrate(old, sealed, incidentId: record.logicalIncidentId);
+      } finally {
+        audio.fillRange(0, audio.length, 0);
+      }
+    }
   }
 
   Future<void> _insert(
@@ -107,6 +179,12 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
         for (final entry in (event['records'] as Map).entries)
           entry.key as String: entry.value as String,
     };
+    if (historicalHashes[record.id] ==
+            EvidenceAuditStore.recordDigest(record) &&
+        !audit.records.values.any((r) => r.id == record.id)) {
+      // Already admitted and replaced by migration: a staging retry is harmless.
+      return;
+    }
     if (historicalHashes.containsKey(record.id) &&
         historicalHashes[record.id] !=
             EvidenceAuditStore.recordDigest(record)) {
@@ -122,7 +200,10 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
     }
     if (record.schemaVersion == 2 &&
         opened.previousVersionId.isNotEmpty &&
-        !historicalHashes.containsKey(opened.previousVersionId)) {
+        !historicalHashes.containsKey(opened.previousVersionId) &&
+        !(await Future.wait(
+          audit.records.values.map((r) => codec.open(r, audit.key)),
+        )).any((r) => r.id == opened.previousVersionId)) {
       throw const CryptoFailure('Missing predecessor evidence version');
     }
     final existing = await Future.wait(
@@ -165,7 +246,7 @@ class EvidenceLocalDataSourceImpl implements EvidenceLocalDataSource {
     await audit.delete(
       records
           .where((r) => r.logicalIncidentId == incident)
-          .map((r) => r.id)
+          .map((r) => r.storageId.isEmpty ? r.id : r.storageId)
           .toList(),
       incidentId: incident,
     );

@@ -35,6 +35,26 @@ AudioWindow window(int second) {
 }
 
 void main() {
+  test('default recording retains more than five minutes as one incident', () {
+    final incident = IncidentRecording(window(5), violence);
+    for (var second = 6; second <= 310; second++) {
+      incident.append(
+        AudioWindow(
+          normalizedSamples: Float32List(80000),
+          rawPcmBytes: Uint8List(160000),
+          timestamp: DateTime.utc(2026).add(Duration(seconds: second)),
+          endSampleIndex: second * AppConstants.sampleRate,
+        ),
+        violence,
+      );
+    }
+    expect(incident.maximumDuration, isNull);
+    expect(incident.durationLimitReached, isFalse);
+    expect(incident.shouldClose, isFalse);
+    expect(incident.length, 310 * 32000);
+    incident.discard();
+    expect(incident.length, 0);
+  });
   test(
     'overlapping windows produce one continuous clip without duplicate PCM',
     () {
@@ -54,20 +74,12 @@ void main() {
     },
   );
 
-  test(
-    'short negative fluctuation keeps the incident open; three quiet seconds close it',
-    () {
-      final incident = IncidentRecording(window(5), violence);
-      incident.append(window(6), normal);
-      incident.append(window(7), violence);
-      incident.append(window(8), normal);
-      incident.append(window(9), null); // silent audio counts as negative
-      expect(incident.shouldClose, isFalse);
-      incident.append(window(10), normal);
-      expect(incident.shouldClose, isTrue);
-      expect(incident.length, 10 * 32000);
-    },
-  );
+  test('first negative window is included and closes the incident', () {
+    final incident = IncidentRecording(window(5), violence);
+    incident.append(window(6), normal);
+    expect(incident.shouldClose, isTrue);
+    expect(incident.length, 6 * 32000);
+  });
 
   test(
     'rejects missing audio instead of silently producing a discontinuous clip',

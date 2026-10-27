@@ -219,7 +219,7 @@ void main() {
     expect(saved.length, 2);
     expect(saved.map((p) => p.evidenceId).toSet().length, 1);
     expect(saved.first.rawAudioBytes.length, 5 * 32000);
-    expect(saved.last.rawAudioBytes.length, (closeWithQuiet ? 9 : 6) * 32000);
+    expect(saved.last.rawAudioBytes.length, (closeWithQuiet ? 7 : 6) * 32000);
     expect(saved.last.startedAt, DateTime.utc(2026));
     expect(inference.disposed, isTrue);
     controller.dispose();

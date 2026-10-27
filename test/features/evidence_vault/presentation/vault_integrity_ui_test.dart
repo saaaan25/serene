@@ -11,6 +11,8 @@ import 'package:serene/app/controllers/app_settings_controller.dart';
 import 'package:serene/core/errors/failures.dart';
 import 'package:serene/core/constants/hive_constants.dart';
 import 'package:serene/core/models/app_settings.dart';
+import 'package:serene/core/services/device_authentication.dart';
+import 'package:serene/core/services/session_manager.dart';
 import 'package:serene/features/evidence_vault/data/datasources/evidence_local_datasource.dart';
 import 'package:serene/features/evidence_vault/data/models/evidence_record_model.dart';
 import 'package:serene/features/evidence_vault/domain/entities/evidence_record.dart';
@@ -22,12 +24,16 @@ import '../../../support/memory_evidence_keys.dart';
 
 class MockVaultRepository extends Mock implements EvidenceRepository {}
 
+class MockDeviceAuthentication extends Mock implements DeviceAuthentication {}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   late AppSettingsController settings;
   late MockVaultRepository repository;
   late List<EvidenceRecord> records;
+  late MockDeviceAuthentication authentication;
+  late SessionManager session;
   GoRouter? router;
   setUp(() async {
     root = await Directory.systemTemp.createTemp('serene_vault_ui_');
@@ -57,6 +63,14 @@ void main() {
     );
     records = await testRepository(source, keys).getAllEvidenceRecords();
     repository = MockVaultRepository();
+    authentication = MockDeviceAuthentication();
+    session = SessionManager()..markAuthenticated();
+    when(
+      () => authentication.authenticate(any(), session),
+    ).thenAnswer((_) async => true);
+    when(() => repository.deleteEvidenceRecord(any())).thenAnswer((_) async {
+      records = [];
+    });
     when(
       () => repository.getAllEvidenceRecords(),
     ).thenAnswer((_) async => records);
@@ -64,6 +78,7 @@ void main() {
   tearDown(() async {
     router?.dispose();
     settings.dispose();
+    session.dispose();
     await Hive.close();
     await root.delete(recursive: true);
   });
@@ -78,6 +93,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<AppSettingsController>.value(value: settings),
           Provider<EvidenceRepository>.value(value: repository),
+          Provider<DeviceAuthentication>.value(value: authentication),
+          ChangeNotifierProvider<SessionManager>.value(value: session),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -95,6 +112,48 @@ void main() {
       verify(() => repository.getAllEvidenceRecords()).called(1);
     },
   );
+
+  Future<void> confirmDelete(WidgetTester tester) async {
+    await tester.ensureVisible(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eliminar'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('CONFIRMAR'));
+    await tester.tap(find.text('CONFIRMAR'));
+  }
+
+  testWidgets(
+    'deletion waits for a fresh authentication before calling repository',
+    (tester) async {
+      final pending = Completer<bool>();
+      when(
+        () => authentication.authenticate(any(), session),
+      ).thenAnswer((_) => pending.future);
+      await render(tester);
+      await confirmDelete(tester);
+      await tester.pumpAndSettle();
+      verifyNever(() => repository.deleteEvidenceRecord(any()));
+      pending.complete(true);
+      await tester.pumpAndSettle();
+      verify(() => repository.deleteEvidenceRecord('version-2')).called(1);
+      expect(find.text('0 items'), findsOneWidget);
+      verify(() => authentication.authenticate(any(), session)).called(1);
+    },
+  );
+
+  testWidgets('cancelled deletion authentication preserves the record', (
+    tester,
+  ) async {
+    when(
+      () => authentication.authenticate(any(), session),
+    ).thenAnswer((_) async => false);
+    await render(tester);
+    await confirmDelete(tester);
+    await tester.pumpAndSettle();
+    verifyNever(() => repository.deleteEvidenceRecord(any()));
+    expect(find.text('1 items'), findsOneWidget);
+  });
 
   testWidgets(
     'an incoming change during loading triggers another repository read',

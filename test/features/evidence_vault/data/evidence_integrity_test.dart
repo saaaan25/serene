@@ -73,6 +73,65 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  Future<EvidenceRecordModel> previousV2() async {
+    final fixture = await sealedFixture(keys);
+    final opened = await codec.open(fixture, keys.secret);
+    final metadata = EvidenceEnvelope.metadata(opened)..remove('storageId');
+    final bytes = Uint8List.fromList(utf8.encode(canonicalJson(metadata)));
+    final audio = await cipher.encryptInMemory(
+      rawAudioBytes: Uint8List.fromList(List.generate(100, (i) => i)),
+      secretKey: keys.secret,
+      aad: bytes,
+    );
+    final protected = await cipher.encryptInMemory(
+      rawAudioBytes: bytes,
+      secretKey: keys.secret,
+      aad: EvidenceEnvelope.metadataAad(fixture.id),
+    );
+    final encoded = EvidenceEnvelope.encode(fixture);
+    encoded['audio'] = base64Encode(audio.cipherBytes);
+    encoded['iv'] = base64Encode(audio.ivBytes);
+    encoded['tag'] = base64Encode(audio.authTag);
+    encoded['metadata'] = base64Encode(protected.cipherBytes);
+    encoded['metadataIv'] = base64Encode(protected.ivBytes);
+    encoded['metadataTag'] = base64Encode(protected.authTag);
+    encoded['hash'] = '';
+    return EvidenceEnvelope.decode(Map<String, dynamic>.from(encoded));
+  }
+
+  for (final stage in AuditWriteStage.values) {
+    test(
+      'privacy migration recovers after interruption at ${stage.name}',
+      () async {
+        await source.insertRecord(await previousV2());
+        source = EvidenceLocalDataSourceImpl(
+          storageGuard: ampleStorage(),
+          keyStorage: keys,
+          onAuditStage: (current) async {
+            if (current == stage) throw StateError('interrupted migration');
+          },
+        );
+        await expectLater(source.fetchAllRecords(), throwsStateError);
+        await Hive.close();
+        Hive.init(root.path);
+        source = EvidenceLocalDataSourceImpl(
+          storageGuard: ampleStorage(),
+          keyStorage: keys,
+        );
+        final repository = testRepository(source, keys);
+        final visible = (await repository.getAllEvidenceRecords()).single;
+        expect(visible.id, 'version-1');
+        expect(visible.storageId, isNot(visible.id));
+        expect(visible.integrityHash, hasLength(64));
+        expect(
+          await repository.getDecryptedAudioBytes(visible),
+          List.generate(100, (i) => i),
+        );
+        expect(await source.fetchAllRecords(), hasLength(1));
+      },
+    );
+  }
+
   test('real bundled model provenance is a SHA-256 digest', () async {
     expect(
       await EvidenceProvenance.modelHash(),
@@ -500,48 +559,47 @@ void main() {
     },
   );
 
-  test(
-    'legacy Hive evidence remains readable and explicitly lacks v2 protection',
-    () async {
-      final payload = await cipher.encryptInMemory(
-        rawAudioBytes: Uint8List.fromList([1, 2, 3, 4]),
-        secretKey: keys.secret,
-      );
-      final legacy = EvidenceRecordModel(
-        id: 'legacy',
-        timestamp: DateTime.utc(2025),
-        predictionLabel: 'old-label',
-        confidenceScore: .9,
-        gpsCoordinates: const {},
-        encryptedAudioBlob: payload.cipherBytes,
-        ivBytes: payload.ivBytes,
-        authTag: payload.authTag,
-        integrityHash: hashing.sha256.convert(payload.cipherBytes).toString(),
-      );
-      Hive.registerAdapter(LegacyV1Writer(), override: true);
-      final box = await Hive.openBox<EvidenceRecordModel>(
-        HiveConstants.encryptedEvidenceBox,
-      );
-      await box.add(legacy); // old auto-generated key
-      await Hive.close();
-      Hive.registerAdapter(EvidenceRecordModelAdapter(), override: true);
-      Hive.init(root.path);
-      final repository = testRepository(source, keys);
-      final records = await repository.getAllEvidenceRecords();
-      expect(records.single.schemaVersion, 1);
-      expect(records.single.hasAuthenticatedMetadata, isFalse);
-      expect(await repository.getDecryptedAudioBytes(records.single), [
-        1,
-        2,
-        3,
-        4,
-      ]);
-      expect(
-        (await source.readVerifiedAuditEvents()).single['operation'],
-        'legacy_import',
-      );
-      await repository.deleteEvidenceRecord('legacy');
-      expect(await source.fetchAllRecords(), isEmpty);
-    },
-  );
+  test('legacy Hive evidence migrates without changing audio', () async {
+    final payload = await cipher.encryptInMemory(
+      rawAudioBytes: Uint8List.fromList([1, 2, 3, 4]),
+      secretKey: keys.secret,
+    );
+    final legacy = EvidenceRecordModel(
+      id: 'legacy',
+      timestamp: DateTime.utc(2025),
+      predictionLabel: 'old-label',
+      confidenceScore: .9,
+      gpsCoordinates: const {},
+      encryptedAudioBlob: payload.cipherBytes,
+      ivBytes: payload.ivBytes,
+      authTag: payload.authTag,
+      integrityHash: hashing.sha256.convert(payload.cipherBytes).toString(),
+    );
+    Hive.registerAdapter(LegacyV1Writer(), override: true);
+    final box = await Hive.openBox<EvidenceRecordModel>(
+      HiveConstants.encryptedEvidenceBox,
+    );
+    await box.add(legacy); // old auto-generated key
+    await Hive.close();
+    Hive.registerAdapter(EvidenceRecordModelAdapter(), override: true);
+    Hive.init(root.path);
+    final repository = testRepository(source, keys);
+    final records = await repository.getAllEvidenceRecords();
+    expect(records.single.schemaVersion, 2);
+    expect(records.single.hasAuthenticatedMetadata, isTrue);
+    expect(records.single.id, 'legacy');
+    expect(records.single.storageId, isNot('legacy'));
+    expect(await repository.getDecryptedAudioBytes(records.single), [
+      1,
+      2,
+      3,
+      4,
+    ]);
+    expect(
+      (await source.readVerifiedAuditEvents()).map((e) => e['operation']),
+      ['legacy_import', 'privacy_migration'],
+    );
+    await repository.deleteEvidenceRecord('legacy');
+    expect(await source.fetchAllRecords(), isEmpty);
+  });
 }

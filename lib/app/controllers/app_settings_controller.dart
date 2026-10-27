@@ -13,6 +13,18 @@ class AppSettingsController extends ChangeNotifier {
 
   bool get isDarkMode => _settings.isDarkMode;
   String get locale => _settings.locale;
+  bool get monitoringEnabled => _settings.monitoringEnabled;
+
+  Future<void> setMonitoringEnabled(bool enabled) async {
+    final updated = AppSettings(
+      isDarkMode: isDarkMode,
+      locale: locale,
+      monitoringEnabled: enabled,
+    );
+    await _box.put('app_settings', updated);
+    _settings = updated;
+    notifyListeners();
+  }
 
   AppSettingsController({required Box<AppSettings> box}) : _box = box {
     _loadSettings();

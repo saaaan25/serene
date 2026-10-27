@@ -95,6 +95,20 @@ void main() {
       },
     );
 
+    test('manual disable cancels a pending monitoring startup', () async {
+      final permissionCheck = Completer<bool>();
+      when(
+        () => mockProcessUseCase.hasMicrophonePermission(),
+      ).thenAnswer((_) => permissionCheck.future);
+      final start = controller.startMonitoring();
+      await Future<void>.delayed(Duration.zero);
+      final stop = controller.pauseMonitoring();
+      permissionCheck.complete(true);
+      await Future.wait([start, stop]);
+      expect(controller.status, MonitoringStatus.paused);
+      verifyNever(() => mockProcessUseCase.getAudioStream());
+    });
+
     test(
       'background/resume does not start an idle or explicitly paused monitor',
       () async {

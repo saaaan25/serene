@@ -1,0 +1,111 @@
+{
+  "model": "model.tflite",
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "max_samples": 224000,
+  "max_seconds": 14.0,
+  "batch_size": "dynamic",
+  "validation_batch_size": 4,
+  "runtime_tensors": {
+    "pcm": {
+      "name": "serving_default_pcm:0",
+      "index": 0,
+      "shape": [
+        1,
+        1
+      ],
+      "shape_signature": [
+        -1,
+        -1
+      ],
+      "dtype": "float32"
+    },
+    "valid_samples": {
+      "name": "serving_default_valid_samples:0",
+      "index": 1,
+      "shape": [
+        1
+      ],
+      "shape_signature": [
+        -1
+      ],
+      "dtype": "int32"
+    },
+    "probabilities": {
+      "name": "StatefulPartitionedCall:0",
+      "index": 1405,
+      "shape": [
+        1,
+        3
+      ],
+      "shape_signature": [
+        -1,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "int8_tensor_count": 90,
+    "float16_tensor_count": 7,
+    "host_invoke_median_ms": 512.8563000000668,
+    "host_invoke_p95_ms": 707.3581550001109,
+    "threads": 4,
+    "validation_batch_size": 4,
+    "dynamic_input": true,
+    "mobile_latency_measured": false,
+    "delegate_policy": "auto",
+    "observed_delegate_nodes_by_batch": [
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46,
+      46
+    ],
+    "observed_delegate_nodes_max": 46
+  },
+  "input_shape_policy": "PCM [batch,samples], lengths [batch]; resize inputs before allocate_tensors",
+  "pcm": "PCM float32 sin normalizar, escala habitual [-1,1]; ceros después de valid_samples",
+  "valid_samples": "int32 [batch], cada longitud entre 400 y max_samples",
+  "normalization": "Incluida en el modelo, solo sobre muestras válidas; varianza poblacional + 1e-7",
+  "output": "Probabilidades softmax float32 [batch,3], mismo orden que labels.json",
+  "padding": "Solo hasta el audio más largo del lote; no rellenar siempre hasta max_samples",
+  "batch_size_effect": "Val se reproduce con el lote original; lote 1 móvil requiere comprobar calidad en ese modo",
+  "long_audio": "No truncar silenciosamente. Una política de ventanas exige validación específica.",
+  "quantization": "mixed-fp16-int8",
+  "full_integer_model": false,
+  "delegate_policy": "CPU como referencia; verificar compatibilidad y rendimiento GPU/NPU en el dispositivo",
+  "graph_fusion": "GELU exacto reconocido desde ONNX; otras optimizaciones a cargo de TFLite",
+  "deployment_status": "Validado en host, pendiente benchmark e integración móvil"
+}

@@ -3,28 +3,34 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../../../../core/services/session_manager.dart';
+import '../../../../core/services/device_authentication.dart';
 import '../../domain/entities/evidence_record.dart';
 import '../../domain/repositories/evidence_repository.dart';
 import '../widgets/in_memory_audio_player.dart';
 
 class AudioPlaybackScreen extends StatefulWidget {
-  const AudioPlaybackScreen({super.key, required this.record});
+  const AudioPlaybackScreen({
+    super.key,
+    required this.record,
+    this.playerBuilder,
+  });
 
   final EvidenceRecord record;
+
+  /// Allows memory-buffer verification without a native audio backend in tests.
+  final Widget Function(Uint8List)? playerBuilder;
 
   @override
   State<AudioPlaybackScreen> createState() => _AudioPlaybackScreenState();
 }
 
 class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
-  final LocalAuthentication _localAuth = LocalAuthentication();
   Uint8List? _decryptedWav;
   bool _isLoading = true;
   bool _authenticationInProgress = false;
@@ -39,7 +45,7 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
   }
 
   Future<void> _authenticateAndLoad() async {
-    if (_authenticationInProgress) return;
+    if (!mounted || _authenticationInProgress) return;
     _authenticationInProgress = true;
 
     setState(() {
@@ -51,27 +57,12 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
     final sessionManager = context.read<SessionManager>();
     final evidenceRepository = context.read<EvidenceRepository>();
     try {
-      final isSupported =
-          await _localAuth.canCheckBiometrics ||
-          await _localAuth.isDeviceSupported();
-      if (!isSupported) {
-        _setError('auth_not_supported');
-        return;
-      }
-
-      sessionManager.beginAuthenticationPrompt();
-      late final bool authenticated;
-      try {
-        authenticated = await _localAuth.authenticate(
-          localizedReason: AppTranslations.tr('audio_auth_reason', locale),
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-            biometricOnly: false,
-          ),
-        );
-      } finally {
-        sessionManager.endAuthenticationPrompt();
-      }
+      final authenticated = await context
+          .read<DeviceAuthentication>()
+          .authenticate(
+            AppTranslations.tr('audio_auth_reason', locale),
+            sessionManager,
+          );
 
       if (!authenticated) {
         _setError('audio_auth_cancelled');
@@ -91,7 +82,7 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
       } finally {
         pcmBytes.fillRange(0, pcmBytes.length, 0);
       }
-      if (!mounted) {
+      if (!mounted || sessionManager.checkSessionTimeout()) {
         wavBytes.fillRange(0, wavBytes.length, 0);
         return;
       }
@@ -104,6 +95,8 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
       debugPrint('Could not authenticate or decrypt evidence audio: $error');
       debugPrintStack(stackTrace: stackTrace);
       _setError('audio_load_error');
+    } finally {
+      _authenticationInProgress = false;
     }
   }
 
@@ -153,6 +146,7 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
   @override
   void dispose() {
     _decryptedWav?.fillRange(0, _decryptedWav!.length, 0);
+    _decryptedWav = null;
     super.dispose();
   }
 
@@ -215,20 +209,18 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _EvidenceMetadata(
-                record: widget.record,
-                translate: t,
-              ),
+              _EvidenceMetadata(record: widget.record, translate: t),
               const SizedBox(height: 24),
               if (_decryptedWav case final audio?)
-                InMemoryAudioPlayer(
-                  key: ValueKey(widget.record.id),
-                  audioData: audio,
-                  errorMessage: t('audio_playback_error'),
-                  failureTitle: t('audio_playback_failure_title'),
-                  retryLabel: t('audio_retry_action'),
-                  autoPlay: true,
-                )
+                widget.playerBuilder?.call(audio) ??
+                    InMemoryAudioPlayer(
+                      key: ValueKey(widget.record.id),
+                      audioData: audio,
+                      errorMessage: t('audio_playback_error'),
+                      failureTitle: t('audio_playback_failure_title'),
+                      retryLabel: t('audio_retry_action'),
+                      autoPlay: true,
+                    )
               else
                 _AuthenticationPanel(
                   isLoading: _isLoading,
@@ -273,10 +265,7 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
 }
 
 class _EvidenceMetadata extends StatelessWidget {
-  const _EvidenceMetadata({
-    required this.record,
-    required this.translate,
-  });
+  const _EvidenceMetadata({required this.record, required this.translate});
 
   final EvidenceRecord record;
   final String Function(String) translate;

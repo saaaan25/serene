@@ -4,19 +4,17 @@
 | --- | --- |
 | Retención predeterminada | Hasta eliminación manual por el usuario. Sin vencimiento por antigüedad. |
 | Revisión y eliminación automática | No se implementa borrado automático de evidencias. Se recomienda revisión manual periódica, por ejemplo mensual, y antes de quedarse sin espacio. La recuperación y limpieza de temporales confirmados son mantenimiento, no eliminación automática de evidencias. |
-| Duración máxima por incidente almacenado | 5 minutos. Una detección continuada genera registros consecutivos con IDs diferentes; el límite no apaga el monitoreo. Las muestras que cruzan el límite pasan al siguiente registro sin duplicarse cuando las ventanas incluyen sus índices de muestra, como ocurre en el flujo real de captura. |
+| Duracion maxima por incidente | Sin limite predeterminado; termina al incluir la primera ventana negativa. |
 | Falta de espacio | Antes de guardar se consulta el volumen correspondiente. Se exige margen de 100 MiB más una estimación conservadora para la escritura, cifrado/JSON, WAL e importación. No se reemplazan ni se borran evidencias para liberar espacio. |
 | Diario temporal | Archivos cifrados de transferencia entre el servicio y el almacén definitivo. Sin caducidad automática de archivos completos pendientes. Se retiran tras importación auditada confirmada. |
 | Eliminación | Eliminar un registro visible elimina todas las versiones de ese incidente, registra la operación en la auditoría y solicita compactación de Hive. No elimina otros incidentes ni segmentos consecutivos con otro ID. |
 | Limitación | La eliminación lógica o física realizada por la app no garantiza remover copias internas gestionadas por el sistema operativo, el sistema de archivos, la memoria flash, backups o copias previas externas. |
 
-## Por qué cinco minutos
+## Duracion y cierre del incidente
 
-Es una decisión operativa inicial, no un requisito legal ni un límite científicamente validado del clasificador. El audio actual es PCM de 16 bits, mono, a 16 kHz: 32 000 bytes por segundo. Cinco minutos requieren 9 600 000 bytes de audio (aproximadamente 9,16 MiB). Diez minutos duplicarían el buffer en RAM y, al conservar snapshots completos, aumentarían aún más el almacenamiento acumulado.
+No hay limite de duracion predeterminado. Se retiene la ventana de cinco segundos que activa la alerta y se agregan las muestras nuevas sin duplicar el solapamiento, hasta incluir la primera ventana negativa. Fuera de un incidente, el audio normal solo permanece en memoria y se reemplaza con datos posteriores.
 
-Con un primer guardado de cinco segundos, avances cada quince segundos y un guardado final, las versiones de una grabación de cinco minutos pueden sumar alrededor de 104 MB de audio cifrado, antes de añadir metadatos, JSON, WAL y marcos obsoletos de Hive. Por tanto, cinco minutos limita el crecimiento de cada buffer, pero no constituye una cuota global. Se debe validar este valor con duración de escenarios representativos, memoria, espacio y tiempos reales de guardado del teléfono objetivo. La constante está en `EvidencePolicy.maximumIncidentDuration`.
-
-Los límites se calculan por muestras, no por el reloj de pared. Si persiste la detección, se continúa en un nuevo registro. No se incorpora de nuevo la ventana solapada de cinco segundos. Cuando la detección deja de ser positiva, se mantiene el comportamiento existente de cierre tras tres segundos negativos dentro del registro activo.
+La interfaz muestra un unico incidente con puntos de recuperacion cifrados. El PCM ocupa 32 000 bytes por segundo; los snapshots completos cada quince segundos aumentan el almacenamiento acumulado. La memoria y el espacio fisico siguen siendo limitados. Una interrupcion recupera el ultimo guardado confirmado.
 
 ## Comportamiento ante falta de espacio
 
@@ -73,4 +71,4 @@ Una mejora futura, si se exige mayor capacidad de revocación, es cifrar cada in
 
 ## Validación
 
-Las pruebas simulan falta de espacio en admisión, desconocimiento de capacidad, errores de disco lleno, borrado manual con poco espacio, compactación diferida y reintento. La grabación se comprueba con límites en segundos y fracciones de segundo para detectar duplicación o pérdida de muestras al crear el siguiente registro. La saturación física del almacenamiento y las reglas de backup deben probarse adicionalmente en el teléfono objetivo.
+Las pruebas simulan falta de espacio en admisión, desconocimiento de capacidad, errores de disco lleno, borrado manual con poco espacio, compactación diferida y reintento. La grabación se comprueba durante más de cinco minutos sin límite predeterminado, con cierre tras la primera ventana negativa y sin duplicación de muestras. También se comprueban límites opcionales configurados explícitamente. La saturación física del almacenamiento y las reglas de backup deben probarse adicionalmente en el teléfono objetivo.

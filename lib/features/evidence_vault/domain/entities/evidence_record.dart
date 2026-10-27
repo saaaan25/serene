@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 class EvidenceRecord {
+  /// Opaque persistence reference; the logical ID remains encrypted.
+  final String storageId;
   final String id;
   final DateTime timestamp;
   final String predictionLabel;
@@ -25,6 +27,7 @@ class EvidenceRecord {
   String get logicalIncidentId => incidentId.isEmpty ? id : incidentId;
 
   const EvidenceRecord({
+    this.storageId = '',
     required this.id,
     required this.timestamp,
     required this.predictionLabel,

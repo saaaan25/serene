@@ -28,6 +28,7 @@ Future<EvidenceRecordModel> sealedFixture(
   int second = 1,
   String previous = '',
 }) => EvidenceEnvelope(CipherManager()).seal(
+  storageId: id,
   key: keys.secret,
   audio: Uint8List.fromList(List.generate(size, (i) => i % 256)),
   metadataRecord: EvidenceRecord(

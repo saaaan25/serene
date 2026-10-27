@@ -10,6 +10,8 @@ import '../../../../app/dialogs/confirm_delete_dialog.dart';
 import '../../../../app/widgets/serene_app_bar.dart';
 import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/localization/app_translations.dart';
+import '../../../../core/services/device_authentication.dart';
+import '../../../../core/services/session_manager.dart';
 import '../../domain/repositories/evidence_repository.dart';
 import '../../data/models/evidence_record_model.dart';
 import '../../domain/entities/evidence_record.dart';
@@ -29,6 +31,7 @@ class _VaultScreenState extends State<VaultScreen> {
   Future<void>? _loading;
   bool _reloadRequested = false;
   bool _isLoading = true;
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -108,9 +111,24 @@ class _VaultScreenState extends State<VaultScreen> {
     }).toList();
   }
 
-  Future<void> _deleteRecord(String id) async {
-    await context.read<EvidenceRepository>().deleteEvidenceRecord(id);
-    await _refreshRecords();
+  Future<bool> _deleteRecord(String id) async {
+    if (_deleting) return false;
+    setState(() => _deleting = true);
+    try {
+      final locale = context.read<AppSettingsController>().locale;
+      final authenticated = await context
+          .read<DeviceAuthentication>()
+          .authenticate(
+            AppTranslations.tr('vault_delete_auth_reason', locale),
+            context.read<SessionManager>(),
+          );
+      if (!authenticated || !mounted) return false;
+      await context.read<EvidenceRepository>().deleteEvidenceRecord(id);
+      if (mounted) await _refreshRecords();
+      return true;
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   Future<void> _openAudio(
@@ -270,48 +288,61 @@ class _VaultScreenState extends State<VaultScreen> {
                             deleteActionText: t('vault_delete_action'),
                             legacyText: t('vault_legacy_record'),
                             onTap: () => _openAudio(item, t),
-                            onDelete: () {
-                              showGeneralDialog<void>(
-                                context: context,
-                                barrierDismissible: true,
-                                barrierLabel: t('vault_cancel_action'),
-                                barrierColor: Colors.transparent,
-                                pageBuilder: (dialogContext, _, _) =>
-                                    ConfirmDeleteDialog(
-                                      title: t('vault_delete_title'),
-                                      message:
-                                          '${t('vault_delete_msg')}\n\n${item.name}',
-                                      confirmLabel: t('vault_confirm_action'),
-                                      cancelLabel: t('vault_cancel_action'),
-                                      onConfirm: () async {
-                                        try {
-                                          await _deleteRecord(item.id);
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                t('vault_delete_success'),
-                                              ),
+                            onDelete: _deleting
+                                ? null
+                                : () {
+                                    showGeneralDialog<void>(
+                                      context: context,
+                                      barrierDismissible: true,
+                                      barrierLabel: t('vault_cancel_action'),
+                                      barrierColor: Colors.transparent,
+                                      pageBuilder: (dialogContext, _, _) =>
+                                          ConfirmDeleteDialog(
+                                            title: t('vault_delete_title'),
+                                            message:
+                                                '${t('vault_delete_msg')}\n\n${item.name}',
+                                            confirmLabel: t(
+                                              'vault_confirm_action',
                                             ),
-                                          );
-                                        } catch (_) {
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                t('vault_delete_error'),
-                                              ),
+                                            cancelLabel: t(
+                                              'vault_cancel_action',
                                             ),
-                                          );
-                                        }
-                                      },
-                                    ),
-                              );
-                            },
+                                            onConfirm: () async {
+                                              try {
+                                                final deleted =
+                                                    await _deleteRecord(
+                                                      item.id,
+                                                    );
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      t(
+                                                        deleted
+                                                            ? 'vault_delete_success'
+                                                            : 'auth_cancelled',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (_) {
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      t('vault_delete_error'),
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
+                                    );
+                                  },
                           ),
                         ),
                       ),
@@ -329,7 +360,7 @@ class _VaultItemCard extends StatelessWidget {
   final String deleteActionText;
   final String legacyText;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   const _VaultItemCard({
     required this.item,
@@ -390,6 +421,7 @@ class _VaultItemCard extends StatelessWidget {
                   ),
                 ),
                 PopupMenuButton<void>(
+                  enabled: onDelete != null,
                   itemBuilder: (context) => [
                     PopupMenuItem<void>(
                       onTap: onDelete,

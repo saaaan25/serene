@@ -44,7 +44,7 @@ class InMemoryAudioSource extends StreamAudioSource {
       );
     }
 
-    final data = audioData.sublist(actualStart, actualEnd);
+    final data = Uint8List.sublistView(audioData, actualStart, actualEnd);
 
     return StreamAudioResponse(
       contentLength: data.length,
@@ -58,7 +58,8 @@ class InMemoryAudioSource extends StreamAudioSource {
 
 /// Widget that plays in-memory audio with full playback controls
 /// Implements Play/Pause, progress slider, and time display
-/// SECURITY: Never writes audio to disk; all data stays in RAM
+/// The app serves decrypted bytes from RAM without creating plaintext files.
+/// Runtime and operating-system copies are outside the owned buffer lifecycle.
 class InMemoryAudioPlayer extends StatefulWidget {
   final Uint8List audioData;
   final String? title;
@@ -140,6 +141,7 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
     try {
       final source = InMemoryAudioSource(audioData: widget.audioData);
       await _audioPlayer.setAudioSource(source);
+      if (!mounted) return;
       if (mounted) {
         setState(() {
           _isLoading = false;

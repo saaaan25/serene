@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cryptography/cryptography.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import '../errors/failures.dart';
 
 class SecureKeyStorage {
@@ -18,7 +19,9 @@ class SecureKeyStorage {
             ),
           );
 
-  /// Get or create a master key for AES encryption
+  /// The OS protects the persisted key. Base64 is serialization, not encryption.
+  /// Plain key bytes exist transiently in process memory for crypto operations;
+  /// managed runtimes cannot guarantee erasure of every internal copy.
   Future<SecretKey> getOrCreateMasterKey() {
     final task = _keyWork.then((_) => _getOrCreateMasterKey());
     _keyWork = task.then<void>((_) {}, onError: (Object _, StackTrace _) {});
@@ -31,18 +34,32 @@ class SecureKeyStorage {
 
       if (existingKeyHex != null) {
         final keyBytes = base64Decode(existingKeyHex);
-        return SecretKey(keyBytes);
+        if (keyBytes.length != 32) {
+          keyBytes.fillRange(0, keyBytes.length, 0);
+          throw const SecureStorageFailure('Invalid AES-256 master key length');
+        }
+        try {
+          return SecretKey(List<int>.from(keyBytes));
+        } finally {
+          keyBytes.fillRange(0, keyBytes.length, 0);
+        }
       }
 
       // Cryptographic key 256 bits
       final algorithm = AesGcm.with256bits();
       final newSecretKey = await algorithm.newSecretKey();
-      final secretKeyBytes = await newSecretKey.extractBytes();
-
-      await _secureStorage.write(
-        key: _masterKeyAlias,
-        value: base64Encode(secretKeyBytes),
+      final secretKeyBytes = Uint8List.fromList(
+        await newSecretKey.extractBytes(),
       );
+
+      try {
+        await _secureStorage.write(
+          key: _masterKeyAlias,
+          value: base64Encode(secretKeyBytes),
+        );
+      } finally {
+        secretKeyBytes.fillRange(0, secretKeyBytes.length, 0);
+      }
 
       return newSecretKey;
     } catch (e) {

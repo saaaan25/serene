@@ -15,6 +15,8 @@ import 'features/evidence_vault/domain/repositories/evidence_repository.dart';
 import 'features/evidence_vault/presentation/controllers/evidence_controller.dart';
 import 'core/constants/hive_constants.dart';
 import 'core/services/recorder_leak_guard.dart';
+import 'core/services/device_authentication.dart';
+import 'app/controllers/monitoring_access_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,11 +40,22 @@ void main() async {
   final monitoringController = di.sl<MonitoringController>();
 
   final sessionManager = SessionManager();
+  final deviceAuthentication = DeviceAuthentication();
+  final monitoringAccess = MonitoringAccessController(
+    settings: di.sl<AppSettingsController>(),
+    monitoring: monitoringController,
+    authentication: deviceAuthentication,
+    session: sessionManager,
+  );
   final router = createRouter(sessionManager);
 
   runApp(
     MultiProvider(
       providers: [
+        Provider<DeviceAuthentication>.value(value: deviceAuthentication),
+        ChangeNotifierProvider<MonitoringAccessController>.value(
+          value: monitoringAccess,
+        ),
         ChangeNotifierProvider<AppSettingsController>.value(
           value: di.sl<AppSettingsController>(),
         ),
@@ -59,6 +72,8 @@ void main() async {
   );
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(monitoringController.startMonitoring());
+    if (di.sl<AppSettingsController>().monitoringEnabled) {
+      unawaited(monitoringController.startMonitoring());
+    }
   });
 }

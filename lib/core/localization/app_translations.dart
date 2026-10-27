@@ -1,8 +1,29 @@
 class AppTranslations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'es': {
+      'vault_delete_auth_reason':
+          'Confirma tu identidad para eliminar esta grabación y sus versiones.',
+      'monitoring_setting_title': 'Monitoreo del micrófono',
+      'monitoring_setting_enabled':
+          'Activado. Se mantiene en segundo plano mientras el sistema lo permite.',
+      'monitoring_setting_disabled': 'Desactivado. No se captura audio.',
+      'monitoring_auth_reason':
+          'Valida tu identidad para cambiar el monitoreo del micrófono.',
+      'monitoring_changing': 'Verificando y aplicando el cambio…',
+      'monitoring_change_busy': 'Hay un cambio de monitoreo en curso.',
+      'monitoring_permission_settings':
+          'El micrófono no está autorizado. Revisa el permiso en los ajustes del dispositivo y vuelve a activar el monitoreo.',
+      'monitoring_permission_denied':
+          'No se concedió permiso para usar el micrófono. El monitoreo no se activó.',
+      'monitoring_change_failed':
+          'No se pudo aplicar el cambio de monitoreo. Revisa su estado en Inicio.',
+      'monitoring_open_settings': 'Abrir ajustes',
+      'vault_access_reason':
+          'Valida tu identidad para consultar tus grabaciones.',
+      'vault_unlock': 'Desbloquear grabaciones',
       'vault_legacy_record': 'Registro antiguo: sin metadatos autenticados',
-      'vault_integrity_error': 'No se pudo verificar la integridad de las grabaciones. Vuelve a abrir la bóveda para reintentar.',
+      'vault_integrity_error':
+          'No se pudo verificar la integridad de las grabaciones. Vuelve a abrir la bóveda para reintentar.',
       // settingsScreen texts
       'settings_title': 'PREFERENCIAS',
       'vault_password': 'Contraseña del Baúl',
@@ -109,8 +130,28 @@ class AppTranslations {
       'nav_settings': 'AJUSTES',
     },
     'en': {
+      'vault_delete_auth_reason':
+          'Verify your identity to delete this recording and its versions.',
+      'monitoring_setting_title': 'Microphone monitoring',
+      'monitoring_setting_enabled':
+          'Enabled. Runs in the background while the system allows it.',
+      'monitoring_setting_disabled': 'Disabled. Audio is not being captured.',
+      'monitoring_auth_reason':
+          'Verify your identity to change microphone monitoring.',
+      'monitoring_changing': 'Verifying and applying the change…',
+      'monitoring_change_busy': 'A monitoring change is already in progress.',
+      'monitoring_permission_settings':
+          'Microphone access is unavailable. Review device permissions and enable monitoring again.',
+      'monitoring_permission_denied':
+          'Microphone permission was not granted. Monitoring was not enabled.',
+      'monitoring_change_failed':
+          'Could not apply the monitoring change. Check its status on Home.',
+      'monitoring_open_settings': 'Open settings',
+      'vault_access_reason': 'Verify your identity to view your recordings.',
+      'vault_unlock': 'Unlock recordings',
       'vault_legacy_record': 'Legacy record: metadata not authenticated',
-      'vault_integrity_error': 'Recording integrity could not be verified. Reopen the vault to retry.',
+      'vault_integrity_error':
+          'Recording integrity could not be verified. Reopen the vault to retry.',
       // SettingsScreen texts
       'settings_title': 'PREFERENCES',
       'vault_password': 'Vault Password',

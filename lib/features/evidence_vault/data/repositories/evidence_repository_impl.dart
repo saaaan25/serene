@@ -120,9 +120,9 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
           (record.savedAt ?? record.timestamp).isAfter(
             old.savedAt ?? old.timestamp,
           ) ||
-          record.schemaVersion == 1 &&
-              old.schemaVersion == 1 &&
-              record.timestamp.isAtSameMomentAs(old.timestamp) &&
+          (record.savedAt ?? record.timestamp).isAtSameMomentAs(
+                old.savedAt ?? old.timestamp,
+              ) &&
               record.encryptedAudioBlob.length >
                   old.encryptedAudioBlob.length) {
         latest[record.logicalIncidentId] = record;
@@ -189,7 +189,7 @@ class EvidenceRepositoryImpl implements EvidenceRepository {
 
   Future<void> _verifyPersisted(EvidenceRecord record) async {
     final persisted = (await localDataSource.fetchAllRecords()).where(
-      (r) => r.id == record.id,
+      (r) => r.id == (record.storageId.isEmpty ? record.id : record.storageId),
     );
     if (persisted.isEmpty ||
         canonicalJson(EvidenceEnvelope.encode(persisted.first)) !=

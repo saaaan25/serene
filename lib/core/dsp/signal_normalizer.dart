@@ -2,6 +2,8 @@ import 'dart:typed_data';
 import '../constants/app_constants.dart';
 
 class SignalNormalizer {
+  // This class scales PCM16 to the model's input range. Mean/variance
+  // normalization is embedded in the mixed TFLite graph and is not repeated here.
   /// Converts PCM 16-bit signed little-endian audio bytes to normalized Float32 values in the range [-1.0, 1.0]
   static Float32List pcm16ToNormalizedFloat32(Uint8List pcmBuffer) {
     final byteData = ByteData.sublistView(pcmBuffer);

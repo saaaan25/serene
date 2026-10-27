@@ -1,5 +1,4 @@
 import 'dart:ffi';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
@@ -12,6 +11,35 @@ import '../../../../core/errors/failures.dart';
 import '../../domain/entities/inference_result.dart';
 
 class TfliteInferenceEngine {
+  TfliteInferenceEngine({
+    Interpreter Function(Uint8List, int?)? interpreterFactory,
+  }) : _interpreterFactory = interpreterFactory ?? _createInterpreter;
+
+  final Interpreter Function(Uint8List, int?) _interpreterFactory;
+  int _pcmInputIndex = -1;
+  int _lengthInputIndex = -1;
+  static const _labelOrder = [
+    AppConstants.classNoViolence,
+    AppConstants.classPhysicalViolence,
+    AppConstants.classVerbalViolence,
+  ];
+
+  static Interpreter _createInterpreter(Uint8List bytes, int? delegateAddress) {
+    final options = InterpreterOptions()..threads = 2;
+    try {
+      if (delegateAddress != null) {
+        options.addDelegate(
+          _FlexDelegatePointer(
+            Pointer<TfLiteDelegate>.fromAddress(delegateAddress),
+          ),
+        );
+      }
+      return Interpreter.fromBuffer(bytes, options: options);
+    } finally {
+      options.delete();
+    }
+  }
+
   Interpreter? _interpreter;
   List<String> _labels = [];
   bool _isInitialized = false;
@@ -23,6 +51,7 @@ class TfliteInferenceEngine {
     String? labelsRaw,
     int? flexDelegateAddress,
   }) async {
+    close();
     try {
       final resolvedModelBytes = modelBytes ?? await _loadModelBytes();
       if (resolvedModelBytes.isEmpty) {
@@ -46,18 +75,23 @@ class TfliteInferenceEngine {
           .where((e) => e.isNotEmpty)
           .toList();
 
-      final options = InterpreterOptions()..threads = 2;
-      if (flexDelegateAddress != null) {
-        final delegatePointer = Pointer<TfLiteDelegate>.fromAddress(
-          flexDelegateAddress,
+      if (!listEquals(_labels, _labelOrder)) {
+        throw AudioProcessingFailure(
+          'Model labels must be ordered as $_labelOrder; received $_labels',
         );
-        options.addDelegate(_FlexDelegatePointer(delegatePointer));
       }
-
+      if (AppConstants.sampleRate != 16000 ||
+          AppConstants.audioChannels != 1 ||
+          AppConstants.expectedSampleCount < 400 ||
+          AppConstants.expectedSampleCount > 224000) {
+        throw const AudioProcessingFailure(
+          'The mixed model requires mono 16 kHz PCM and 400..224000 samples.',
+        );
+      }
       try {
-        _interpreter = Interpreter.fromBuffer(
+        _interpreter = _interpreterFactory(
           resolvedModelBytes,
-          options: options,
+          flexDelegateAddress,
         );
       } on Object catch (error) {
         throw AudioProcessingFailure(
@@ -67,28 +101,50 @@ class TfliteInferenceEngine {
         );
       }
 
-      final inputShape = _interpreter!.getInputTensor(0).shape;
-      final outputShape = _interpreter!.getOutputTensor(0).shape;
-      if (_interpreter!.getInputTensor(0).type != TensorType.float32 ||
-          _interpreter!.getOutputTensor(0).type != TensorType.float32) {
+      final inputs = _interpreter!.getInputTensors();
+      final outputs = _interpreter!.getOutputTensors();
+      if (inputs.length != 2 || outputs.length != 1) {
         throw const AudioProcessingFailure(
-          'The audio model must have float32 input and output tensors. '
-          'Export a float32 model or an internally quantized model with float32 I/O.',
+          'The mixed model requires two inputs (pcm, valid_samples) and one probability output.',
         );
       }
-      if (inputShape.length != 2 ||
-          inputShape.first != 1 ||
-          inputShape.last != AppConstants.expectedSampleCount) {
-        throw AudioProcessingFailure(
-          'Unexpected model input shape: $inputShape',
+      String inputName(Tensor tensor) => tensor.name
+          .split(':')
+          .first
+          .replaceFirst(RegExp(r'^serving_default_'), '');
+      _pcmInputIndex = inputs.indexWhere((t) => inputName(t) == 'pcm');
+      _lengthInputIndex = inputs.indexWhere(
+        (t) => inputName(t) == 'valid_samples',
+      );
+      if (_pcmInputIndex < 0 ||
+          _lengthInputIndex < 0 ||
+          inputs[_pcmInputIndex].type != TensorType.float32 ||
+          inputs[_lengthInputIndex].type != TensorType.int32 ||
+          outputs.single.type != TensorType.float32 ||
+          inputs[_pcmInputIndex].shape.length != 2 ||
+          inputs[_lengthInputIndex].shape.length != 1) {
+        throw const AudioProcessingFailure(
+          'Expected pcm float32 [batch,samples], valid_samples int32 [batch], '
+          'and float32 probabilities. Check the exported mobile contract.',
         );
       }
-      if (_labels.isEmpty ||
-          outputShape.length != 2 ||
-          outputShape.first != 1 ||
-          outputShape.last != _labels.length) {
+      // The asset starts at [1,1]. Configure BOTH dynamic inputs before
+      // reallocating; inference uses one complete five-second window per batch.
+      _interpreter!.resizeInputTensor(_pcmInputIndex, [
+        1,
+        AppConstants.expectedSampleCount,
+      ]);
+      _interpreter!.resizeInputTensor(_lengthInputIndex, [1]);
+      _interpreter!.allocateTensors();
+      final pcmShape = _interpreter!.getInputTensor(_pcmInputIndex).shape;
+      final lengthShape = _interpreter!.getInputTensor(_lengthInputIndex).shape;
+      final outputShape = _interpreter!.getOutputTensor(0).shape;
+      if (!listEquals(pcmShape, [1, AppConstants.expectedSampleCount]) ||
+          !listEquals(lengthShape, [1]) ||
+          !listEquals(outputShape, [1, _labelOrder.length])) {
         throw AudioProcessingFailure(
-          'Model output shape $outputShape does not match ${_labels.length} labels',
+          'Unexpected allocated model shapes: pcm=$pcmShape, '
+          'valid_samples=$lengthShape, probabilities=$outputShape',
         );
       }
 
@@ -123,31 +179,41 @@ class TfliteInferenceEngine {
     }
   }
 
-  InferenceResult predict(Float32List normalizedSamples) {
+  InferenceResult predict(Float32List pcmSamples) {
     if (!_isInitialized || _interpreter == null) {
       throw const AudioProcessingFailure('TFLite engine not initialized');
     }
-    if (normalizedSamples.length != AppConstants.expectedSampleCount) {
+    if (pcmSamples.length != AppConstants.expectedSampleCount) {
       throw AudioProcessingFailure(
         'Expected ${AppConstants.expectedSampleCount} audio samples, '
-        'received ${normalizedSamples.length}',
+        'received ${pcmSamples.length}',
       );
     }
 
     try {
-      // Input tensor: shape [1, 80000] for a single audio window
-      final input = [normalizedSamples];
-
-      // Output tensor: shape [1, number_of_labels], initialized to zeros
-      final output = List<double>.filled(
-        _labels.length,
-        0.0,
-      ).reshape([1, _labels.length]);
-
-      _interpreter!.run(input, output);
-
-      final List<double> rawScores = List<double>.from(output[0]);
-      final List<double> probabilities = _applySoftmax(rawScores);
+      if (pcmSamples.any(
+        (sample) => !sample.isFinite || sample < -1 || sample > 1,
+      )) {
+        throw const AudioProcessingFailure(
+          'PCM must be finite float32 samples in [-1,1].',
+        );
+      }
+      // Only PCM16 scaling is applied in the app. Statistical normalization and
+      // softmax are already embedded in the exported model.
+      final inputs = List<Object>.filled(2, const <int>[]);
+      inputs[_pcmInputIndex] = [pcmSamples];
+      inputs[_lengthInputIndex] = Int32List.fromList([pcmSamples.length]);
+      final output = [List<double>.filled(_labels.length, 0)];
+      _interpreter!.runForMultipleInputs(inputs, {0: output});
+      final probabilities = List<double>.from(output.single);
+      final sum = probabilities.fold<double>(0, (sum, value) => sum + value);
+      if (probabilities.length != _labels.length ||
+          probabilities.any((p) => !p.isFinite || p < 0 || p > 1) ||
+          (sum - 1).abs() > 1e-3) {
+        throw const AudioProcessingFailure(
+          'Model output must be finite softmax probabilities summing to one.',
+        );
+      }
 
       // Search for the label with the highest probability
       int maxIndex = 0;
@@ -183,20 +249,12 @@ class TfliteInferenceEngine {
     }
   }
 
-  List<double> _applySoftmax(List<double> logits) {
-    if (logits.isEmpty) {
-      throw const AudioProcessingFailure('Model returned no output scores');
-    }
-    final maxLogit = logits.reduce(max);
-    final expValues = logits.map((val) => exp(val - maxLogit)).toList();
-    final sumExp = expValues.reduce((a, b) => a + b);
-    return expValues.map((val) => val / sumExp).toList();
-  }
-
   void close() {
     _interpreter?.close();
     _interpreter = null;
     _isInitialized = false;
+    _pcmInputIndex = -1;
+    _lengthInputIndex = -1;
   }
 }
 

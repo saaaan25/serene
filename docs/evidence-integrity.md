@@ -8,7 +8,7 @@ La implementación ofrece un **mecanismo técnico de integridad y trazabilidad r
 
 Cada guardado produce una versión con UUID propio. El identificador del incidente, fecha de inicio UTC, fecha de guardado UTC, versión anterior, etiqueta, confianza, GPS, versión instalada de la aplicación, SHA-256 del archivo `model.tflite` y formato PCM se serializan como JSON canónico: claves ordenadas recursivamente y codificación UTF-8.
 
-Esos bytes son el AAD del audio AES-256-GCM y, por separado, el contenido de un sobre AES-256-GCM de metadatos. El sobre usa como AAD su propósito, esquema e identificador de versión. Cada operación genera un nonce independiente. Hive y los archivos del servicio conservan únicamente el UUID de versión, esquema, audio cifrado, sobre cifrado y sus nonces/tags. Los campos descriptivos del adaptador antiguo quedan vacíos; los metadatos se reconstruyen en memoria.
+Esos bytes son el AAD del audio AES-256-GCM y, por separado, el contenido de un sobre AES-256-GCM de metadatos. El sobre usa como AAD su propósito, esquema y una referencia técnica aleatoria independiente del identificador lógico. Cada operación genera un nonce aleatorio independiente. Hive y los archivos del servicio conservan esa referencia, esquema, audio cifrado, sobre cifrado, sus nonces/tags y el SHA-256 complementario del audio cifrado. El identificador lógico está cifrado; los campos descriptivos del adaptador antiguo quedan vacíos y se reconstruyen en memoria.
 
 La versión y número de compilación se consultan con `package_info_plus`, por lo que también reflejan los cambios de versión realizados al compilar. El hash del modelo se calcula sobre el asset real, no sobre una etiqueta declarada manualmente.
 
@@ -40,7 +40,7 @@ Eliminar un incidente elimina sus versiones activas y conserva el evento de elim
 
 El adaptador mantiene los campos Hive 0–8 y añade campos 9–18 con valores por defecto explícitos. Los registros reales de nueve campos se leen como esquema 1. Se conserva el descifrado AES-GCM original sin AAD y la comprobación SHA-256 anterior. Los archivos JSON antiguos del servicio también se importan.
 
-La primera apertura incorpora los registros antiguos como una base auditada `legacy_import`. Esto acredita continuidad **desde la incorporación**, no demuestra que sus metadatos anteriores fueran auténticos. Sus metadatos antiguos siguen en su formato previo; la interfaz los marca como registros sin metadatos autenticados. No se modifica retroactivamente su significado ni se presentan como esquema 2.
+La primera apertura incorpora los registros antiguos como una base auditada `legacy_import`. A continuación, `privacy_migration` sustituye cada contenedor antiguo por uno con metadatos cifrados, identificador externo independiente y hash complementario. Se verifica el audio antes de confirmar la sustitución y se usa el mismo mecanismo transaccional recuperable. También se migran los contenedores del esquema 2 anterior que exponían el identificador lógico. Esto no demuestra que los metadatos previos fueran auténticos: la protección nueva empieza en la migración. Véase [protección y migración](privacy-and-encryption.md).
 
 Si dos archivos antiguos del servicio reutilizan el mismo ID con contenidos diferentes, el segundo se conserva como una versión legacy con ID determinístico derivado de su digest. Cuando los snapshots antiguos comparten fecha, la bóveda elige el audio más completo, sin reemplazar la otra versión.
 

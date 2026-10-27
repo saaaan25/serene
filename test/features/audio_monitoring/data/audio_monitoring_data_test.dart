@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
@@ -125,26 +124,6 @@ void main() {
   });
 
   group('Mathematical Logic', () {
-    List<double> applySoftmax(List<double> logits) {
-      final maxLogit = logits.reduce(max);
-      final expValues = logits.map((v) => exp(v - maxLogit)).toList();
-      final sumExp = expValues.reduce((a, b) => a + b);
-      return expValues.map((v) => v / sumExp).toList();
-    }
-
-    test(
-      'Softmax should transform logits to bounded probabilities that sum to 1.0',
-      () {
-        final logits = [1.2, 3.8, 0.5];
-        final probs = applySoftmax(logits);
-
-        final sum = probs.reduce((a, b) => a + b);
-        expect(sum, closeTo(1.0, 0.0001));
-        expect(probs[1], greaterThan(probs[0]));
-        expect(probs[0], greaterThan(probs[2]));
-      },
-    );
-
     test(
       'It should not activate if the predicted label is no_violence, regardless of confidence',
       () {

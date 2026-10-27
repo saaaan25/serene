@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as hashing;
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/crypto/cipher_manager.dart';
 import '../../../../core/errors/failures.dart';
@@ -50,7 +52,6 @@ class EvidenceEnvelope {
         record.audioFormat.isNotEmpty ||
         record.savedAt != null ||
         record.previousVersionId.isNotEmpty ||
-        record.integrityHash.isNotEmpty ||
         record.metadataCiphertext == null ||
         record.metadataNonce == null ||
         record.metadataTag == null) {
@@ -61,6 +62,7 @@ class EvidenceEnvelope {
   }
 
   static Map<String, Object?> metadata(EvidenceRecord record) => {
+    if (record.storageId.isNotEmpty) 'storageId': record.storageId,
     'schema': record.schemaVersion,
     'id': record.id,
     'incident': record.incidentId,
@@ -86,9 +88,13 @@ class EvidenceEnvelope {
     required EvidenceRecord metadataRecord,
     required Uint8List audio,
     required SecretKey key,
+    String? storageId,
   }) async {
+    final reference = storageId ?? const Uuid().v4();
     final bytes = Uint8List.fromList(
-      utf8.encode(canonicalJson(metadata(metadataRecord))),
+      utf8.encode(
+        canonicalJson({...metadata(metadataRecord), 'storageId': reference}),
+      ),
     );
     try {
       final payload = await cipher.encryptInMemory(
@@ -99,11 +105,11 @@ class EvidenceEnvelope {
       final envelope = await cipher.encryptInMemory(
         rawAudioBytes: bytes,
         secretKey: key,
-        aad: metadataAad(metadataRecord.id),
+        aad: metadataAad(reference),
       );
       // All descriptive metadata lives exclusively inside the encrypted envelope.
       return EvidenceRecordModel(
-        id: metadataRecord.id,
+        id: reference,
         schemaVersion: 2,
         timestamp: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
         predictionLabel: '',
@@ -112,7 +118,7 @@ class EvidenceEnvelope {
         encryptedAudioBlob: payload.cipherBytes,
         ivBytes: payload.ivBytes,
         authTag: payload.authTag,
-        integrityHash: '',
+        integrityHash: hashing.sha256.convert(payload.cipherBytes).toString(),
         metadataCiphertext: envelope.cipherBytes,
         metadataNonce: envelope.ivBytes,
         metadataTag: envelope.authTag,
@@ -123,6 +129,11 @@ class EvidenceEnvelope {
   }
 
   Future<EvidenceRecord> open(EvidenceRecordModel stored, SecretKey key) async {
+    if (stored.integrityHash.isNotEmpty &&
+        hashing.sha256.convert(stored.encryptedAudioBlob).toString() !=
+            stored.integrityHash) {
+      throw const CryptoFailure('Encrypted audio checksum mismatch');
+    }
     if (stored.schemaVersion == 1) {
       requireSealed(stored);
       return stored.toEntity();
@@ -143,16 +154,19 @@ class EvidenceEnvelope {
     try {
       final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (data['schema'] != 2 ||
-          data['id'] != stored.id ||
+          (data['storageId'] ?? data['id']) != stored.id ||
           canonicalJson(data) != utf8.decode(bytes)) {
         throw const CryptoFailure('Evidence metadata/header mismatch');
       }
       return EvidenceRecord(
-        id: stored.id,
+        id: data['id'] as String,
+        storageId: (data['storageId'] as String?) ?? '',
         schemaVersion: 2,
         incidentId: data['incident'] as String,
         timestamp: DateTime.parse(data['timestamp'] as String).toUtc(),
-        savedAt: DateTime.parse(data['savedAt'] as String).toUtc(),
+        savedAt: data['savedAt'] == null
+            ? null
+            : DateTime.parse(data['savedAt'] as String).toUtc(),
         previousVersionId: data['previousVersion'] as String,
         predictionLabel: data['label'] as String,
         confidenceScore: (data['confidence'] as num).toDouble(),

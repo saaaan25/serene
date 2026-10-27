@@ -241,6 +241,21 @@ class EvidenceAuditStore {
     );
   }
 
+  /// Replace a legacy container through the same recoverable transaction as writes.
+  Future<void> migrate(
+    EvidenceRecordModel old,
+    EvidenceRecordModel sealed, {
+    required String incidentId,
+  }) async {
+    await _commit(
+      await _state(),
+      'privacy_migration',
+      [sealed],
+      [old.id],
+      incidentId: incidentId,
+    );
+  }
+
   Future<void> _commit(
     Map<String, dynamic> state,
     String operation,
