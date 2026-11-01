@@ -166,7 +166,6 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: t('vault_cancel_action'),
         ),
-        title: Text(t('audio_screen_title')),
         backgroundColor: colors.surface,
         foregroundColor: colors.onSurface,
         elevation: 0,

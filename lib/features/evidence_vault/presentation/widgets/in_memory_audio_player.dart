@@ -90,6 +90,7 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
   late StreamSubscription<Duration> _positionSubscription;
   late StreamSubscription<Duration?> _durationSubscription;
 
+  double? _scrubPosition;
   bool _isPlaying = false;
   bool _isLoading = true;
   bool _hasLoadError = false;
@@ -108,7 +109,9 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
     _playerStateSubscription = _audioPlayer.playerStateStream.listen((state) {
       if (mounted) {
         setState(() {
-          _isPlaying = state.playing;
+          _isPlaying =
+              state.playing &&
+              state.processingState != ProcessingState.completed;
         });
       }
     });
@@ -165,6 +168,9 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
       if (_isPlaying) {
         await _audioPlayer.pause();
       } else {
+        if (_audioPlayer.processingState == ProcessingState.completed) {
+          await _audioPlayer.seek(Duration.zero);
+        }
         await _audioPlayer.play();
       }
     } catch (error) {
@@ -181,6 +187,7 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
   Future<void> _onSliderChanged(double value) async {
     try {
       await _audioPlayer.seek(Duration(milliseconds: value.toInt()));
+      if (mounted) setState(() => _scrubPosition = null);
     } catch (error) {
       debugPrint('Could not seek in-memory audio playback: $error');
       if (mounted) {
@@ -202,10 +209,10 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final maxDuration = _totalDuration.inMilliseconds.toDouble();
-    final currentPosition = _currentPosition.inMilliseconds
-        .toDouble()
-        .clamp(0, maxDuration > 0 ? maxDuration : 1)
-        .toDouble();
+    final currentPosition =
+        (_scrubPosition ?? _currentPosition.inMilliseconds.toDouble())
+            .clamp(0, maxDuration > 0 ? maxDuration : 1)
+            .toDouble();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -301,7 +308,10 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
             Slider(
               value: currentPosition,
               max: maxDuration > 0 ? maxDuration : 1,
-              onChanged: maxDuration > 0 ? _onSliderChanged : null,
+              onChanged: maxDuration > 0
+                  ? (value) => setState(() => _scrubPosition = value)
+                  : null,
+              onChangeEnd: maxDuration > 0 ? _onSliderChanged : null,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -309,7 +319,9 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    _formatDuration(_currentPosition),
+                    _formatDuration(
+                      Duration(milliseconds: currentPosition.toInt()),
+                    ),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: colors.onSurface,
                     ),

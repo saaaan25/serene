@@ -175,10 +175,11 @@ class _VaultScreenState extends State<VaultScreen> {
                   children: [
                     Text(
                       t('vault_title'),
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: primaryColor,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: primaryColor,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Text(

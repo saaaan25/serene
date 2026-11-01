@@ -316,8 +316,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.lock, color: Colors.pink),
-                          const SizedBox(width: 12),
                           Text(
                             t('home_secure_vault'),
                             style: Theme.of(context).textTheme.titleLarge
