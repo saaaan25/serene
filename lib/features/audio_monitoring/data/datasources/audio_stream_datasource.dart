@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:record/record.dart';
+import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 
@@ -34,7 +35,16 @@ class AudioStreamDataSourceImpl implements AudioStreamDataSource {
            audioRecorder ?? (recorderFactory ?? AudioRecorder.new)();
 
   @override
-  Future<bool> hasPermission() => _audioRecorder.hasPermission(request: false);
+  Future<bool> hasPermission() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // record_android 1.5.2 returns false without an Activity, even when
+      // RECORD_AUDIO is granted. The foreground service has its own engine
+      // without an Activity; permission_handler checks the application context.
+      // Only the UI may request permission; this check never opens a dialog.
+      return (await Permission.microphone.status).isGranted;
+    }
+    return _audioRecorder.hasPermission(request: false);
+  }
 
   @override
   Future<Stream<Uint8List>> startStream() async {

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../app/controllers/monitoring_access_controller.dart';
+import '../../../../app/controllers/location_access_controller.dart';
 import '../../../../app/widgets/serene_app_bar.dart';
 import '../../../../core/constants/hive_constants.dart';
 import '../../../../core/localization/app_translations.dart';
@@ -39,6 +40,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ).watch().listen((_) => _loadStats());
     }
     _loadStats();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_restoreMicrophonePermission());
+    });
   }
 
   @override
@@ -68,15 +72,43 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _retryMonitoring() async {
+  Future<void> _restoreMicrophonePermission() async {
     final access = context.read<MonitoringAccessController>();
+    final message = await access.restoreMicrophonePermission();
+    if (!mounted) return;
+    if (message != null) _showMonitoringMessage(message, access);
+    final locationAccess = context.read<LocationAccessController>();
+    final locationMessage = await locationAccess.restorePermission();
+    if (!mounted || locationMessage == null) return;
     final locale = context.read<AppSettingsController>().locale;
     String t(String key) => AppTranslations.tr(key, locale);
-    final message = await access.changeEnabled(
-      true,
-      t('monitoring_auth_reason'),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(t(locationMessage)),
+        action:
+            locationMessage == 'location_permission_settings' ||
+                locationMessage == 'location_services_disabled'
+            ? SnackBarAction(
+                label: t('monitoring_open_settings'),
+                onPressed: () async {
+                  if (locationMessage == 'location_services_disabled') {
+                    await locationAccess.location.openLocationSettings();
+                  } else {
+                    await locationAccess.location.openSettings();
+                  }
+                },
+              )
+            : null,
+      ),
     );
-    if (!mounted || message == null) return;
+  }
+
+  void _showMonitoringMessage(
+    String message,
+    MonitoringAccessController access,
+  ) {
+    final locale = context.read<AppSettingsController>().locale;
+    String t(String key) => AppTranslations.tr(key, locale);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(t(message)),
@@ -90,6 +122,18 @@ class _HomeScreenState extends State<HomeScreen> {
             : null,
       ),
     );
+  }
+
+  Future<void> _retryMonitoring() async {
+    final access = context.read<MonitoringAccessController>();
+    final locale = context.read<AppSettingsController>().locale;
+    String t(String key) => AppTranslations.tr(key, locale);
+    final message = await access.changeEnabled(
+      true,
+      t('monitoring_auth_reason'),
+    );
+    if (!mounted || message == null) return;
+    _showMonitoringMessage(message, access);
   }
 
   @override

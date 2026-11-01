@@ -19,7 +19,9 @@ class VaultAccessGate extends StatelessWidget {
     return ListenableBuilder(
       listenable: route,
       builder: (context, _) => _VaultBoundary(
-        active: route.value.uri.path == '/vault',
+        active:
+            route.value.uri.path == '/vault' ||
+            route.value.uri.path == '/vault/audio',
         builder: builder,
       ),
     );

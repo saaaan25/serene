@@ -20,6 +20,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   final SaveEncryptedEvidenceUseCase _saveEvidenceUseCase;
   final MonitoringForegroundService _foregroundService;
   final bool runInService;
+  bool _locationEnabled;
   final AudioInferenceIsolate Function() _inferenceFactory;
   final Future<Map<String, double>> Function()? _coordinatesProvider;
   IncidentRecording? _incident;
@@ -54,10 +55,12 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     required SaveEncryptedEvidenceUseCase saveEvidenceUseCase,
     MonitoringForegroundService? foregroundService,
     this.runInService = false,
+    bool locationEnabled = false,
     this.maximumIncidentDuration = EvidencePolicy.maximumIncidentDuration,
     AudioInferenceIsolate Function()? inferenceFactory,
     Future<Map<String, double>> Function()? coordinatesProvider,
-  }) : _processAudioUseCase = processAudioUseCase,
+  }) : _locationEnabled = locationEnabled,
+       _processAudioUseCase = processAudioUseCase,
        _saveEvidenceUseCase = saveEvidenceUseCase,
        _foregroundService = foregroundService ?? MonitoringForegroundService(),
        _inferenceFactory = inferenceFactory ?? AudioInferenceIsolate.new,
@@ -65,6 +68,23 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     if (!runInService) WidgetsBinding.instance.addObserver(this);
     if (_usesAndroidService) {
       _serviceSubscription = _foregroundService.events.listen(_onServiceEvent);
+    }
+  }
+
+  Future<void> setLocationEnabled(bool enabled) async {
+    // An in-flight Android service start may already have read its types.
+    // Finish it before deciding whether a restart is necessary.
+    if (_usesAndroidService && _startFuture != null) await _startFuture;
+    if (_locationEnabled == enabled) return;
+    final restart = _usesAndroidService && isMonitoring;
+    if (restart) await pauseMonitoring();
+    _locationEnabled = enabled;
+    if (!enabled) _incident?.coordinates = null;
+    if (restart) {
+      await startMonitoring();
+      if (!isMonitoring) {
+        throw StateError('Could not apply location service configuration');
+      }
     }
   }
 
@@ -199,7 +219,13 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (generation != _startGeneration) return;
       if (_usesAndroidService) {
-        await _foregroundService.start();
+        if (_locationEnabled) {
+          final permission = await Geolocator.checkPermission();
+          _locationEnabled =
+              permission == LocationPermission.whileInUse ||
+              permission == LocationPermission.always;
+        }
+        await _foregroundService.start(locationEnabled: _locationEnabled);
         _foregroundServiceStarted = true;
         if (generation != _startGeneration) {
           await _foregroundService.stop();
@@ -388,8 +414,12 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _saveIncident(IncidentRecording incident) async {
-    final coordinates = incident.coordinates ??=
-        await _captureCurrentCoordinates();
+    final captured = _locationEnabled
+        ? incident.coordinates ?? await _captureCurrentCoordinates()
+        : <String, double>{};
+    // A permission dialog or a location fix can finish after the switch changes.
+    final coordinates = _locationEnabled ? captured : <String, double>{};
+    incident.coordinates = coordinates;
     await _saveEvidenceUseCase(
       SaveEncryptedEvidenceParams(
         rawAudioBytes: incident.snapshot(),
@@ -418,15 +448,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         return {};
       }
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        // Background recording must not open a permission dialog.
-        if (!runInService &&
-            WidgetsBinding.instance.lifecycleState ==
-                AppLifecycleState.resumed) {
-          permission = await Geolocator.requestPermission();
-        }
-      }
+      final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         debugPrint('Location unavailable: permission was not granted.');

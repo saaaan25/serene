@@ -1,4 +1,6 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
@@ -11,6 +13,19 @@ class MockAudioRecorder extends Mock implements AudioRecorder {}
 class FakeRecordConfig extends Fake implements RecordConfig {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const permissionChannel = MethodChannel(
+    'flutter.baseflow.com/permissions/methods',
+  );
+  setUp(() {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+  });
+  tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionChannel, null);
+  });
+
   setUpAll(() {
     registerFallbackValue(FakeRecordConfig());
   });
@@ -23,6 +38,46 @@ void main() {
       mockRecorder = MockAudioRecorder();
       dataSource = AudioStreamDataSourceImpl(audioRecorder: mockRecorder);
     });
+
+    for (final granted in [true, false]) {
+      test(
+        'Android service checks OS permission without Activity: $granted',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          final calls = <MethodCall>[];
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(permissionChannel, (call) async {
+                calls.add(call);
+                expect(call.method, 'checkPermissionStatus');
+                expect(call.arguments, Permission.microphone.value);
+                return granted
+                    ? PermissionStatus.granted.index
+                    : PermissionStatus.denied.index;
+              });
+          // Simulate record_android's false result in an Activity-less engine.
+          when(
+            () => mockRecorder.hasPermission(request: false),
+          ).thenAnswer((_) async => false);
+          when(() => mockRecorder.isRecording()).thenAnswer((_) async => false);
+          final stream = const Stream<Uint8List>.empty();
+          when(
+            () => mockRecorder.startStream(any()),
+          ).thenAnswer((_) async => stream);
+          expect(await dataSource.hasPermission(), granted);
+          if (granted) {
+            expect(await dataSource.startStream(), same(stream));
+          } else {
+            await expectLater(
+              dataSource.startStream(),
+              throwsA(isA<AudioProcessingFailure>()),
+            );
+            verifyNever(() => mockRecorder.startStream(any()));
+          }
+          verifyNever(() => mockRecorder.hasPermission(request: false));
+          expect(calls, hasLength(2));
+        },
+      );
+    }
 
     test('hasPermission checks without prompting automatically', () async {
       when(

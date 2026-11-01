@@ -48,6 +48,10 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      if target.name == 'geolocator_apple'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'BYPASS_PERMISSION_LOCATION_ALWAYS=1'
+      end
       if target.name == 'permission_handler_apple'
         config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
           '$(inherited)',

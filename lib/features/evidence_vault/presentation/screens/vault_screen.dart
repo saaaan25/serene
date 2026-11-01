@@ -244,7 +244,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       children: [
                         Text(
                           t('vault_recent_assets'),
-                          style: Theme.of(context).textTheme.titleLarge
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         Text(

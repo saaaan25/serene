@@ -73,6 +73,7 @@ Future<void> initServiceLocator() async {
   // Controllers
   sl.registerFactory<MonitoringController>(
     () => MonitoringController(
+      locationEnabled: sl<AppSettingsController>().locationEnabled,
       processAudioUseCase: sl(),
       saveEvidenceUseCase: sl(),
     ),

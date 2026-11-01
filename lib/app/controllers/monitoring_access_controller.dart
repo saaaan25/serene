@@ -29,6 +29,34 @@ class MonitoringAccessController extends ChangeNotifier {
   bool _busy = false;
   bool get isBusy => _busy;
 
+  /// Restore OS permission for monitoring the user already enabled.
+  Future<String?> restoreMicrophonePermission() async {
+    if (_busy || !settings.monitoringEnabled) return null;
+    _busy = true;
+    notifyListeners();
+    try {
+      var permission = await microphone.status();
+      if (permission.isGranted) return null;
+      if (permission.isPermanentlyDenied || permission.isRestricted) {
+        return 'monitoring_permission_settings';
+      }
+      permission = await microphone.request();
+      if (!permission.isGranted) {
+        return permission.isPermanentlyDenied || permission.isRestricted
+            ? 'monitoring_permission_settings'
+            : 'monitoring_permission_denied';
+      }
+      if (!settings.monitoringEnabled) return null;
+      await monitoring.startMonitoring();
+      return monitoring.isMonitoring ? null : 'monitoring_change_failed';
+    } catch (_) {
+      return 'monitoring_change_failed';
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
   /// Null means success; otherwise returns a localized message key.
   Future<String?> changeEnabled(bool enabled, String reason) async {
     if (_busy) return 'monitoring_change_busy';

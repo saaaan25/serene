@@ -1,6 +1,23 @@
 class AppTranslations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'es': {
+      'location_setting_title': 'Ubicaci?n de las grabaciones',
+      'location_setting_enabled':
+          'Activada. Se adjunta a las grabaciones cuando est? disponible.',
+      'location_setting_disabled': 'Desactivada. No se adjunta ubicaci?n.',
+      'location_auth_reason':
+          'Valida tu identidad para cambiar el acceso a la ubicaci?n.',
+      'location_changing': 'Verificando y aplicando el cambio?',
+      'location_change_busy': 'Hay un cambio de ubicaci?n en curso.',
+      'location_permission_settings':
+          'La ubicaci?n est? bloqueada. Habilita el permiso en los ajustes del dispositivo.',
+      'location_permission_denied':
+          'No se concedi? permiso para acceder a la ubicaci?n.',
+      'location_services_disabled':
+          'La ubicaci?n del dispositivo est? apagada. Act?vala en los ajustes.',
+      'location_change_failed':
+          'No se pudo cambiar el acceso a la ubicaci?n. Vuelve a intentarlo.',
+
       'vault_delete_auth_reason':
           'Confirma tu identidad para eliminar esta grabación y sus versiones.',
       'monitoring_setting_title': 'Monitoreo del micrófono',
@@ -63,6 +80,10 @@ class AppTranslations {
       'vault_empty_message': 'No hay evidencias grabadas en este dispositivo.',
       'vault_audio_unavailable':
           'Esta grabación ya no está disponible. Actualiza la lista e inténtalo de nuevo.',
+      'audio_play': 'Reproducir',
+      'audio_pause': 'Pausar',
+      'audio_restart': 'Volver al inicio',
+      'audio_repeat': 'Repetir audio',
       'audio_screen_title': 'Reproducción segura',
       'audio_auth_reason': 'Confirma tu identidad para escuchar esta grabación',
       'audio_auth_cancelled':
@@ -130,6 +151,20 @@ class AppTranslations {
       'nav_settings': 'AJUSTES',
     },
     'en': {
+      'location_setting_title': 'Recording location',
+      'location_setting_enabled':
+          'Enabled. Attached to recordings when available.',
+      'location_setting_disabled': 'Disabled. Location is not attached.',
+      'location_auth_reason': 'Verify your identity to change location access.',
+      'location_changing': 'Checking and applying the change?',
+      'location_change_busy': 'A location change is in progress.',
+      'location_permission_settings':
+          'Location access is blocked. Enable permission in device settings.',
+      'location_permission_denied': 'Location permission was not granted.',
+      'location_services_disabled':
+          'Device location is off. Enable it in settings.',
+      'location_change_failed': 'Could not change location access. Try again.',
+
       'vault_delete_auth_reason':
           'Verify your identity to delete this recording and its versions.',
       'monitoring_setting_title': 'Microphone monitoring',
@@ -190,6 +225,10 @@ class AppTranslations {
       'vault_empty_message': 'There is no evidence recorded on this device.',
       'vault_audio_unavailable':
           'This recording is no longer available. Refresh the list and try again.',
+      'audio_play': 'Play',
+      'audio_pause': 'Pause',
+      'audio_restart': 'Restart',
+      'audio_repeat': 'Repeat audio',
       'audio_screen_title': 'Secure playback',
       'audio_auth_reason': 'Verify your identity to listen to this recording',
       'audio_auth_cancelled':

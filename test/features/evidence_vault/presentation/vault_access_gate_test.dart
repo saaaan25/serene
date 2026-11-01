@@ -39,6 +39,7 @@ void main() {
     router = GoRouter(
       initialLocation: '/home',
       routes: [
+        GoRoute(path: '/vault/audio', builder: (_, _) => const Text('audio')),
         StatefulShellRoute.indexedStack(
           builder: (_, _, shell) => shell,
           branches: [
@@ -108,6 +109,19 @@ void main() {
       verify(() => auth.authenticate(any(), session)).called(2);
     },
   );
+
+  testWidgets('returning from audio preserves vault access', (tester) async {
+    await render(tester);
+    router.go('/vault');
+    await tester.pumpAndSettle();
+    unawaited(router.push<void>('/vault/audio'));
+    await tester.pumpAndSettle();
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('sensitive recordings'), findsOneWidget);
+    expect(loads, 1);
+    verify(() => auth.authenticate(any(), session)).called(1);
+  });
 
   testWidgets('cancelled authentication does not mount or load recordings', (
     tester,

@@ -75,6 +75,26 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('home requests missing OS permission for enabled monitoring', () async {
+    await settings.setMonitoringEnabled(true);
+    when(
+      () => microphone.status(),
+    ).thenAnswer((_) async => PermissionStatus.denied);
+    when(
+      () => microphone.request(),
+    ).thenAnswer((_) async => PermissionStatus.granted);
+    expect(await access.restoreMicrophonePermission(), isNull);
+    verify(() => microphone.request()).called(1);
+    verify(() => monitoring.startMonitoring()).called(1);
+    verifyNever(() => auth.authenticate(any(), session));
+  });
+
+  test('home respects disabled monitoring', () async {
+    expect(await access.restoreMicrophonePermission(), isNull);
+    verifyNever(() => microphone.request());
+    verifyNever(() => monitoring.startMonitoring());
+  });
+
   test(
     'cancelled authentication never checks permission or changes monitoring',
     () async {

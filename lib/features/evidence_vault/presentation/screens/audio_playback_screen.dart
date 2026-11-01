@@ -219,6 +219,10 @@ class _AudioPlaybackScreenState extends State<AudioPlaybackScreen> {
                       failureTitle: t('audio_playback_failure_title'),
                       retryLabel: t('audio_retry_action'),
                       autoPlay: true,
+                      playLabel: t('audio_play'),
+                      pauseLabel: t('audio_pause'),
+                      restartLabel: t('audio_restart'),
+                      repeatLabel: t('audio_repeat'),
                     )
               else
                 _AuthenticationPanel(

@@ -71,9 +71,13 @@ class MonitoringForegroundService {
     _initialized = true;
   }
 
-  Future<void> start() async {
+  Future<void> start({bool locationEnabled = false}) async {
     if (!Platform.isAndroid) return;
     initialize();
+    await FlutterForegroundTask.saveData(
+      key: 'locationEnabled',
+      value: locationEnabled,
+    );
     // Persist the shared encryption key before the second engine starts.
     await SecureKeyStorage().getOrCreateMasterKey();
     _ready = Completer<void>();
@@ -83,7 +87,10 @@ class MonitoringForegroundService {
     } else {
       final result = await FlutterForegroundTask.startService(
         serviceId: 410,
-        serviceTypes: const [ForegroundServiceTypes.microphone],
+        serviceTypes: [
+          ForegroundServiceTypes.microphone,
+          if (locationEnabled) ForegroundServiceTypes.location,
+        ],
         notificationTitle: 'Serene esta protegiendote',
         notificationText: 'Iniciando monitoreo de audio',
         notificationButtons: const [
@@ -176,6 +183,9 @@ class _MonitoringTaskHandler extends TaskHandler {
       ),
       saveEvidenceUseCase: SaveEncryptedEvidenceUseCase(repository),
       runInService: true,
+      locationEnabled:
+          await FlutterForegroundTask.getData<bool>(key: 'locationEnabled') ??
+          false,
     )..addListener(_sendStatus);
     await _controller!.startMonitoring();
     _sendStatus();

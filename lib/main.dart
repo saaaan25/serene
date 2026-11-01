@@ -17,6 +17,7 @@ import 'core/constants/hive_constants.dart';
 import 'core/services/recorder_leak_guard.dart';
 import 'core/services/device_authentication.dart';
 import 'app/controllers/monitoring_access_controller.dart';
+import 'app/controllers/location_access_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,12 +48,21 @@ void main() async {
     authentication: deviceAuthentication,
     session: sessionManager,
   );
+  final locationAccess = LocationAccessController(
+    settings: di.sl<AppSettingsController>(),
+    monitoring: monitoringController,
+    authentication: deviceAuthentication,
+    session: sessionManager,
+  );
   final router = createRouter(sessionManager);
 
   runApp(
     MultiProvider(
       providers: [
         Provider<DeviceAuthentication>.value(value: deviceAuthentication),
+        ChangeNotifierProvider<LocationAccessController>.value(
+          value: locationAccess,
+        ),
         ChangeNotifierProvider<MonitoringAccessController>.value(
           value: monitoringAccess,
         ),

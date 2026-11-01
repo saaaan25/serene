@@ -38,6 +38,60 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => registerFallbackValue(ParamsFake()));
 
+  test(
+    'disabling location drops a pending fix from the saved incident',
+    () async {
+      final process = ProcessMock();
+      final save = SaveMock();
+      final stream = StreamController<AudioWindow>();
+      final fix = Completer<Map<String, double>>();
+      final requested = Completer<void>();
+      final saved = <SaveEncryptedEvidenceParams>[];
+      when(
+        () => process.hasMicrophonePermission(),
+      ).thenAnswer((_) async => true);
+      when(
+        () => process.getAudioStream(),
+      ).thenAnswer((_) async => stream.stream);
+      when(() => process.stop()).thenAnswer((_) async {
+        await stream.close();
+      });
+      when(() => save.call(any())).thenAnswer((call) async {
+        saved.add(
+          call.positionalArguments.first as SaveEncryptedEvidenceParams,
+        );
+      });
+      final controller = MonitoringController(
+        processAudioUseCase: process,
+        saveEvidenceUseCase: save,
+        inferenceFactory: () => InferenceFake([fixtures.violence]),
+        locationEnabled: true,
+        coordinatesProvider: () {
+          requested.complete();
+          return fix.future;
+        },
+      );
+      await controller.startMonitoring();
+      final raw = fixtures.window(5);
+      stream.add(
+        AudioWindow(
+          normalizedSamples: Float32List.fromList(List.filled(80000, .1)),
+          rawPcmBytes: raw.rawPcmBytes,
+          timestamp: raw.timestamp,
+          endSampleIndex: raw.endSampleIndex,
+        ),
+      );
+      await requested.future;
+      await controller.setLocationEnabled(false);
+      fix.complete({'lat': -12, 'lng': -77});
+      await controller.pauseMonitoring();
+      expect(saved, isNotEmpty);
+      expect(saved.every((item) => item.gpsCoordinates.isEmpty), isTrue);
+      controller.dispose();
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
+
   for (final cap in [
     const Duration(seconds: 6),
     const Duration(milliseconds: 6500),

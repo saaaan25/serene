@@ -6,6 +6,7 @@ import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../app/widgets/serene_app_bar.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../widgets/monitoring_setting.dart';
+import '../widgets/location_setting.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -41,6 +42,8 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: 12),
 
                 const MonitoringSetting(),
+                const SizedBox(height: 16),
+                const LocationSetting(),
                 const SizedBox(height: 16),
 
                 _SettingItem(

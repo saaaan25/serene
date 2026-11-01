@@ -68,6 +68,10 @@ class InMemoryAudioPlayer extends StatefulWidget {
   final String failureTitle;
   final String retryLabel;
   final bool autoPlay;
+  final String playLabel;
+  final String pauseLabel;
+  final String restartLabel;
+  final String repeatLabel;
 
   const InMemoryAudioPlayer({
     super.key,
@@ -78,6 +82,10 @@ class InMemoryAudioPlayer extends StatefulWidget {
     this.failureTitle = 'Playback unavailable',
     this.retryLabel = 'Retry',
     this.autoPlay = false,
+    this.playLabel = 'Play',
+    this.pauseLabel = 'Pause',
+    this.restartLabel = 'Restart',
+    this.repeatLabel = 'Repeat',
   });
 
   @override
@@ -91,6 +99,10 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
   late StreamSubscription<Duration?> _durationSubscription;
 
   double? _scrubPosition;
+  bool _repeat = false;
+  bool _seeking = false;
+  Duration? _pendingSeek;
+  int _scrubGeneration = 0;
   bool _isPlaying = false;
   bool _isLoading = true;
   bool _hasLoadError = false;
@@ -116,13 +128,19 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
       }
     });
 
-    _positionSubscription = _audioPlayer.positionStream.listen((position) {
-      if (mounted) {
-        setState(() {
-          _currentPosition = position;
+    _positionSubscription = _audioPlayer
+        .createPositionStream(
+          steps: 1000,
+          minPeriod: const Duration(milliseconds: 16),
+          maxPeriod: const Duration(milliseconds: 50),
+        )
+        .listen((position) {
+          if (mounted) {
+            setState(() {
+              _currentPosition = position;
+            });
+          }
         });
-      }
-    });
 
     _durationSubscription = _audioPlayer.durationStream.listen((duration) {
       if (mounted) {
@@ -185,16 +203,37 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
   }
 
   Future<void> _onSliderChanged(double value) async {
+    _pendingSeek = Duration(milliseconds: value.toInt());
+    if (_seeking) return;
+    _seeking = true;
     try {
-      await _audioPlayer.seek(Duration(milliseconds: value.toInt()));
-      if (mounted) setState(() => _scrubPosition = null);
+      while (mounted && _pendingSeek != null) {
+        final target = _pendingSeek!;
+        final generation = _scrubGeneration;
+        _pendingSeek = null;
+        await _audioPlayer.seek(target);
+        if (mounted && _pendingSeek == null && generation == _scrubGeneration) {
+          setState(() {
+            _currentPosition = target;
+            _scrubPosition = null;
+          });
+        }
+      }
     } catch (error) {
       debugPrint('Could not seek in-memory audio playback: $error');
-      if (mounted) {
-        setState(() {
-          _hasLoadError = true;
-        });
-      }
+      if (mounted) setState(() => _scrubPosition = null);
+    } finally {
+      _seeking = false;
+    }
+  }
+
+  Future<void> _toggleRepeat() async {
+    final repeat = !_repeat;
+    try {
+      await _audioPlayer.setLoopMode(repeat ? LoopMode.one : LoopMode.off);
+      if (mounted) setState(() => _repeat = repeat);
+    } catch (error) {
+      debugPrint('Could not change audio repeat mode: $error');
     }
   }
 
@@ -292,22 +331,10 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
               ),
             )
           else ...[
-            IconButton.filled(
-              onPressed: _togglePlayPause,
-              iconSize: 34,
-              padding: const EdgeInsets.all(16),
-              style: IconButton.styleFrom(
-                backgroundColor: colors.primary,
-                foregroundColor: colors.onPrimary,
-              ),
-              icon: Icon(
-                _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              ),
-            ),
-            const SizedBox(height: 16),
             Slider(
               value: currentPosition,
               max: maxDuration > 0 ? maxDuration : 1,
+              onChangeStart: maxDuration > 0 ? (_) => _scrubGeneration++ : null,
               onChanged: maxDuration > 0
                   ? (value) => setState(() => _scrubPosition = value)
                   : null,
@@ -334,6 +361,46 @@ class _InMemoryAudioPlayerState extends State<InMemoryAudioPlayer> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  tooltip: widget.restartLabel,
+                  onPressed: () {
+                    setState(() {
+                      _scrubGeneration++;
+                      _scrubPosition = 0;
+                    });
+                    unawaited(_onSliderChanged(0));
+                  },
+                  icon: const Icon(Icons.skip_previous_rounded),
+                ),
+                IconButton.filled(
+                  tooltip: _isPlaying ? widget.pauseLabel : widget.playLabel,
+                  onPressed: _togglePlayPause,
+                  iconSize: 34,
+                  padding: const EdgeInsets.all(16),
+                  style: IconButton.styleFrom(
+                    backgroundColor: colors.primary,
+                    foregroundColor: colors.onPrimary,
+                  ),
+                  icon: Icon(
+                    _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  ),
+                ),
+                IconButton(
+                  tooltip: widget.repeatLabel,
+                  isSelected: _repeat,
+                  selectedIcon: Icon(
+                    Icons.repeat_one_rounded,
+                    color: colors.primary,
+                  ),
+                  icon: const Icon(Icons.repeat_rounded),
+                  onPressed: _toggleRepeat,
+                ),
+              ],
             ),
           ],
         ],
