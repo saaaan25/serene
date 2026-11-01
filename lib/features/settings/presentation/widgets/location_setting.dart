@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'setting_icon.dart';
+
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../app/controllers/location_access_controller.dart';
 import '../../../../core/localization/app_translations.dart';
@@ -25,9 +27,10 @@ class LocationSetting extends StatelessWidget {
         key: const ValueKey('location_setting'),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         activeThumbColor: Theme.of(context).colorScheme.primary,
-        secondary: Icon(
-          settings.locationEnabled ? Icons.location_on : Icons.location_off,
-          color: Theme.of(context).colorScheme.primary,
+        secondary: SettingIcon(
+          icon: settings.locationEnabled
+              ? Icons.location_on
+              : Icons.location_off,
         ),
         title: Text(
           t('location_setting_title'),

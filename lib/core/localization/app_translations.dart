@@ -1,22 +1,22 @@
 class AppTranslations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'es': {
-      'location_setting_title': 'Ubicaci?n de las grabaciones',
+      'location_setting_title': 'Ubicación de las grabaciones',
       'location_setting_enabled':
-          'Activada. Se adjunta a las grabaciones cuando est? disponible.',
-      'location_setting_disabled': 'Desactivada. No se adjunta ubicaci?n.',
+          'Activada. Se adjunta a las grabaciones cuando está disponible.',
+      'location_setting_disabled': 'Desactivada. No se adjunta ubicación.',
       'location_auth_reason':
-          'Valida tu identidad para cambiar el acceso a la ubicaci?n.',
-      'location_changing': 'Verificando y aplicando el cambio?',
-      'location_change_busy': 'Hay un cambio de ubicaci?n en curso.',
+          'Valida tu identidad para cambiar el acceso a la ubicación.',
+      'location_changing': 'Verificando y aplicando el cambio…',
+      'location_change_busy': 'Hay un cambio de ubicación en curso.',
       'location_permission_settings':
-          'La ubicaci?n est? bloqueada. Habilita el permiso en los ajustes del dispositivo.',
+          'La ubicación está bloqueada. Habilita el permiso en los ajustes del dispositivo.',
       'location_permission_denied':
-          'No se concedi? permiso para acceder a la ubicaci?n.',
+          'No se concedió permiso para acceder a la ubicación.',
       'location_services_disabled':
-          'La ubicaci?n del dispositivo est? apagada. Act?vala en los ajustes.',
+          'La ubicación del dispositivo está apagada. Actívala en los ajustes.',
       'location_change_failed':
-          'No se pudo cambiar el acceso a la ubicaci?n. Vuelve a intentarlo.',
+          'No se pudo cambiar el acceso a la ubicación. Vuelve a intentarlo.',
 
       'vault_delete_auth_reason':
           'Confirma tu identidad para eliminar esta grabación y sus versiones.',

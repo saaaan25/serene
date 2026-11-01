@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'setting_icon.dart';
+
 import '../../../../app/controllers/app_settings_controller.dart';
 import '../../../../app/controllers/monitoring_access_controller.dart';
 import '../../../../core/localization/app_translations.dart';
@@ -27,9 +29,8 @@ class MonitoringSetting extends StatelessWidget {
         key: const ValueKey('monitoring_setting'),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         activeThumbColor: Theme.of(context).colorScheme.primary,
-        secondary: Icon(
-          settings.monitoringEnabled ? Icons.mic : Icons.mic_off,
-          color: Theme.of(context).colorScheme.primary,
+        secondary: SettingIcon(
+          icon: settings.monitoringEnabled ? Icons.mic : Icons.mic_off,
         ),
         title: Text(
           t('monitoring_setting_title'),

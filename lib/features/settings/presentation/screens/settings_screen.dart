@@ -7,6 +7,7 @@ import '../../../../app/widgets/serene_app_bar.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../widgets/monitoring_setting.dart';
 import '../widgets/location_setting.dart';
+import '../widgets/setting_icon.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -97,39 +98,38 @@ class SettingsScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            settingsController.isDarkMode
-                                ? Icons.dark_mode
-                                : Icons.light_mode,
-                            color: primaryColor,
-                          ),
-                          const SizedBox(width: 16),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                t('dark_mode'),
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              Text(
-                                settingsController.isDarkMode
-                                    ? t('enabled')
-                                    : t('disabled'),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.6),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      SettingIcon(
+                        icon: settingsController.isDarkMode
+                            ? Icons.dark_mode
+                            : Icons.light_mode,
                       ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t('dark_mode'),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              settingsController.isDarkMode
+                                  ? t('enabled')
+                                  : t('disabled'),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Switch(
                         value: settingsController.isDarkMode,
                         onChanged: (value) {
@@ -338,15 +338,7 @@ class _SettingItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: primaryColor.withValues(alpha: 0.15),
-              ),
-              child: Icon(icon, color: primaryColor),
-            ),
+            SettingIcon(icon: icon),
             const SizedBox(width: 16),
             Expanded(
               child: Column(

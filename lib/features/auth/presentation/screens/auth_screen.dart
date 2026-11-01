@@ -101,94 +101,180 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       backgroundColor: surfaceColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.shield, color: primaryColor, size: 28),
-                      const SizedBox(width: 12),
-                      Text(
-                        'serene',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: onSurfaceColor,
-                            ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
-              GestureDetector(
-                onTap: _attemptBiometricAuth,
-                child: Stack(
-                  alignment: Alignment.center,
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              sliver: SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(70),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.shield_rounded,
+                          color: primaryColor,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'serene',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: onSurfaceColor,
+                                letterSpacing: -0.4,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 40),
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 360),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 104,
+                                height: 104,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: primaryColor.withValues(alpha: 0.12),
+                                  border: Border.all(
+                                    color: primaryColor.withValues(alpha: 0.18),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.fingerprint_rounded,
+                                  size: 62,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              const SizedBox(height: 28),
+                              Text(
+                                t('auth_welcome_title'),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.7,
+                                      height: 1.2,
+                                      color: onSurfaceColor,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                t('auth_welcome_subtitle'),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: onSurfaceColor.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      height: 1.5,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 32),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 54,
+                                child: FilledButton.icon(
+                                  onPressed: _isAuthenticating
+                                      ? null
+                                      : _attemptBiometricAuth,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: primaryColor,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                  ),
+                                  icon: _isAuthenticating
+                                      ? SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: onSurfaceColor,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.fingerprint_rounded,
+                                          size: 22,
+                                        ),
+                                  label: Text(t('auth_button')),
+                                ),
+                              ),
+                              // Reserve room so cancellation does not move the action.
+                              const SizedBox(height: 12),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 64,
+                                ),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 180),
+                                  child: _errorMessageKey == null
+                                      ? const SizedBox.shrink()
+                                      : Container(
+                                          key: ValueKey(_errorMessageKey),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .error
+                                                .withValues(alpha: 0.08),
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.info_outline_rounded,
+                                                size: 18,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.error,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  t(_errorMessageKey!),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: Theme.of(
+                                                          context,
+                                                        ).colorScheme.error,
+                                                        height: 1.4,
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                    Icon(Icons.fingerprint, size: 90, color: primaryColor),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
-              const SizedBox(height: 32.0),
-              Text(
-                t('auth_welcome_title'),
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: onSurfaceColor,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8.0),
-              Text(
-                t('auth_welcome_subtitle'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: onSurfaceColor.withValues(alpha: 0.7),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32.0),
-
-              if (_errorMessageKey != null)
-                Text(
-                  t(_errorMessageKey!),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-              const SizedBox(height: 24.0),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: FilledButton(
-                  onPressed: _isAuthenticating ? null : _attemptBiometricAuth,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28.0),
-                    ),
-                  ),
-                  child: _isAuthenticating
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(t('auth_button')),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
