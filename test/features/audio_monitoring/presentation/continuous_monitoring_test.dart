@@ -22,12 +22,16 @@ class InferenceFake extends AudioInferenceIsolate {
   final List<InferenceResult> results;
   int calls = 0;
   bool disposed = false;
+  Duration delay = Duration.zero;
   InferenceFake(this.results);
   @override
   Future<void> initialize() async {}
   @override
-  Future<InferenceResult> predict(Float32List samples) async =>
-      results[calls++];
+  Future<InferenceResult> predict(Float32List samples) async {
+    if (delay != Duration.zero) await Future<void>.delayed(delay);
+    return results[calls++];
+  }
+
   @override
   Future<void> dispose() async {
     disposed = true;
@@ -37,6 +41,109 @@ class InferenceFake extends AudioInferenceIsolate {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => registerFallbackValue(ParamsFake()));
+
+  Future<(List<SaveEncryptedEvidenceParams>, int)> runSequence(
+    List<InferenceResult> predictions, {
+    List<int>? seconds,
+    Float32List? signal,
+    Duration inferenceDelay = Duration.zero,
+  }) async {
+    final process = ProcessMock();
+    final save = SaveMock();
+    final stream = StreamController<AudioWindow>();
+    final saved = <SaveEncryptedEvidenceParams>[];
+    final inference = InferenceFake(predictions)..delay = inferenceDelay;
+    when(() => process.hasMicrophonePermission()).thenAnswer((_) async => true);
+    when(() => process.getAudioStream()).thenAnswer((_) async => stream.stream);
+    when(() => process.stop()).thenAnswer((_) async {
+      await stream.close();
+    });
+    when(() => save.call(any())).thenAnswer((call) async {
+      saved.add(call.positionalArguments.first as SaveEncryptedEvidenceParams);
+    });
+    final controller = MonitoringController(
+      processAudioUseCase: process,
+      saveEvidenceUseCase: save,
+      inferenceFactory: () => inference,
+    );
+    await controller.startMonitoring();
+    for (final second
+        in seconds ?? List.generate(predictions.length, (i) => i + 5)) {
+      final raw = fixtures.window(second);
+      stream.add(
+        AudioWindow(
+          normalizedSamples:
+              signal ??
+              Float32List.fromList(
+                List.generate(80000, (i) => i.isEven ? .1 : -.1),
+              ),
+          rawPcmBytes: raw.rawPcmBytes,
+          timestamp: raw.timestamp,
+          endSampleIndex: raw.endSampleIndex,
+        ),
+      );
+    }
+    await Future<void>.delayed(Duration.zero);
+    await controller.pauseMonitoring();
+    expect(controller.status, MonitoringStatus.paused);
+    controller.dispose();
+    await Future<void>.delayed(Duration.zero);
+    return (saved, inference.calls);
+  }
+
+  test(
+    'isolated positives and a final unconfirmed candidate never persist',
+    () async {
+      final (saved, calls) = await runSequence([
+        fixtures.violence,
+        fixtures.normal,
+        fixtures.violence,
+      ]);
+      expect(saved, isEmpty);
+      expect(calls, 3);
+    },
+  );
+
+  test(
+    'constant PCM bypasses inference and cannot trigger a recording',
+    () async {
+      final (saved, calls) = await runSequence(
+        [],
+        seconds: [5, 6],
+        signal: Float32List.fromList(List.filled(80000, 1 / 32768)),
+      );
+      expect(saved, isEmpty);
+      expect(calls, 0);
+    },
+  );
+
+  test('a skipped window cannot reuse a slow positive inference', () async {
+    final (saved, calls) = await runSequence(
+      [fixtures.violence],
+      seconds: [5, 6],
+      inferenceDelay: const Duration(milliseconds: 850),
+    );
+    expect(saved, isEmpty);
+    expect(calls, 1);
+  });
+
+  test('repeated sample positions cannot provide a second vote', () async {
+    final (saved, calls) = await runSequence(
+      [fixtures.violence],
+      seconds: [5, 5],
+    );
+    expect(saved, isEmpty);
+    expect(calls, 1);
+  });
+
+  test('old positive cannot confirm a much later candidate', () async {
+    final (saved, calls) = await runSequence(
+      [fixtures.violence, fixtures.violence],
+      seconds: [5, 12],
+    );
+    expect(saved, isEmpty);
+    expect(calls, 2);
+  });
 
   test(
     'disabling location drops a pending fix from the saved incident',
@@ -64,7 +171,8 @@ void main() {
       final controller = MonitoringController(
         processAudioUseCase: process,
         saveEvidenceUseCase: save,
-        inferenceFactory: () => InferenceFake([fixtures.violence]),
+        inferenceFactory: () =>
+            InferenceFake([fixtures.violence, fixtures.violence]),
         locationEnabled: true,
         coordinatesProvider: () {
           requested.complete();
@@ -75,10 +183,23 @@ void main() {
       final raw = fixtures.window(5);
       stream.add(
         AudioWindow(
-          normalizedSamples: Float32List.fromList(List.filled(80000, .1)),
+          normalizedSamples: Float32List.fromList(
+            List.generate(80000, (i) => i.isEven ? .1 : -.1),
+          ),
           rawPcmBytes: raw.rawPcmBytes,
           timestamp: raw.timestamp,
           endSampleIndex: raw.endSampleIndex,
+        ),
+      );
+      final confirmation = fixtures.window(6);
+      stream.add(
+        AudioWindow(
+          normalizedSamples: Float32List.fromList(
+            List.generate(80000, (i) => i.isEven ? .1 : -.1),
+          ),
+          rawPcmBytes: confirmation.rawPcmBytes,
+          timestamp: confirmation.timestamp,
+          endSampleIndex: confirmation.endSampleIndex,
         ),
       );
       await requested.future;
@@ -93,6 +214,7 @@ void main() {
   );
 
   for (final cap in [
+    const Duration(seconds: 5),
     const Duration(seconds: 6),
     const Duration(milliseconds: 6500),
   ]) {
@@ -130,7 +252,9 @@ void main() {
           final raw = fixtures.window(second);
           stream.add(
             AudioWindow(
-              normalizedSamples: Float32List.fromList(List.filled(80000, .1)),
+              normalizedSamples: Float32List.fromList(
+                List.generate(80000, (i) => i.isEven ? .1 : -.1),
+              ),
               rawPcmBytes: raw.rawPcmBytes,
               timestamp: raw.timestamp,
               endSampleIndex: raw.endSampleIndex,
@@ -201,7 +325,9 @@ void main() {
         final raw = fixtures.window(second);
         stream.add(
           AudioWindow(
-            normalizedSamples: Float32List.fromList(List.filled(80000, .1)),
+            normalizedSamples: Float32List.fromList(
+              List.generate(80000, (i) => i.isEven ? .1 : -.1),
+            ),
             rawPcmBytes: raw.rawPcmBytes,
             timestamp: raw.timestamp,
             endSampleIndex: raw.endSampleIndex,
@@ -259,7 +385,9 @@ void main() {
       final raw = fixtures.window(second);
       stream.add(
         AudioWindow(
-          normalizedSamples: Float32List.fromList(List.filled(80000, .1)),
+          normalizedSamples: Float32List.fromList(
+            List.generate(80000, (i) => i.isEven ? .1 : -.1),
+          ),
           rawPcmBytes: raw.rawPcmBytes,
           timestamp: raw.timestamp,
           endSampleIndex: raw.endSampleIndex,

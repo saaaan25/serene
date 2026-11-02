@@ -35,6 +35,16 @@ AudioWindow window(int second) {
 }
 
 void main() {
+  test(
+    'unclassified PCM is retained without becoming a negative prediction',
+    () {
+      final incident = IncidentRecording(window(5), violence);
+      incident.append(window(6), null, hasNewClassification: false);
+      expect(incident.shouldClose, isFalse);
+      expect(incident.length, 6 * 32000);
+      expect(incident.confidence, violence.confidence);
+    },
+  );
   test('default recording retains more than five minutes as one incident', () {
     final incident = IncidentRecording(window(5), violence);
     for (var second = 6; second <= 310; second++) {

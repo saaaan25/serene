@@ -84,7 +84,11 @@ class IncidentRecording {
   bool get checkpointDue => _checkpointSamples >= AppConstants.sampleRate * 15;
   void markCheckpoint() => _checkpointSamples = 0;
 
-  void append(AudioWindow window, InferenceResult? result) {
+  void append(
+    AudioWindow window,
+    InferenceResult? result, {
+    bool hasNewClassification = true,
+  }) {
     final end =
         window.endSampleIndex ?? _lastEndSample + AppConstants.sampleRate;
     final newSamples = end - _lastEndSample;
@@ -112,6 +116,7 @@ class IncidentRecording {
     );
     _lastEndSample += retainedSamples;
     _checkpointSamples += retainedSamples;
+    if (!hasNewClassification) return;
     if (result?.isViolenceDetected ?? false) {
       _quietSamples = 0;
       if (result!.confidence > confidence) {

@@ -138,18 +138,18 @@ class _AuthScreenState extends State<AuthScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 104,
-                                height: 104,
+                                width: 96,
+                                height: 96,
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: primaryColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(30),
+                                  color: primaryColor.withValues(alpha: 0.08),
                                   border: Border.all(
-                                    color: primaryColor.withValues(alpha: 0.18),
+                                    color: primaryColor.withValues(alpha: 0.12),
                                   ),
                                 ),
                                 child: Icon(
-                                  Icons.fingerprint_rounded,
-                                  size: 62,
+                                  Icons.verified_user_outlined,
+                                  size: 48,
                                   color: primaryColor,
                                 ),
                               ),
@@ -204,7 +204,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                           ),
                                         )
                                       : const Icon(
-                                          Icons.fingerprint_rounded,
+                                          Icons.lock_open_rounded,
                                           size: 22,
                                         ),
                                   label: Text(t('auth_button')),

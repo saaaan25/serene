@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/services/monitoring_foreground_service.dart';
 import '../../../../core/constants/evidence_policy.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/dsp/signal_quality.dart';
+import '../../domain/detection_policy.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../evidence_vault/domain/usecases/save_encrypted_evidence_usecase.dart';
 import '../../domain/entities/audio_window.dart';
@@ -35,9 +39,12 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _retryTimer;
   Future<void>? _resourceStop;
   bool _stoppingResources = false;
-  InferenceResult? _latestInference;
-  DateTime? _lastInferenceAt;
-  Duration _inferenceInterval = const Duration(seconds: 1);
+  final DetectionPolicy _detection = DetectionPolicy();
+  final List<(AudioWindow, InferenceResult?)> _pendingWindows = [];
+  InferenceResult? _lastConfirmedResult;
+  int? _lastInferredEndSample;
+  int _lastProcessedEndSample = 0;
+  int _inferenceStrideSamples = AppConstants.sampleRate;
 
   AudioInferenceIsolate? _inferenceIsolate;
   StreamSubscription<AudioWindow>? _audioSubscription;
@@ -333,72 +340,68 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _processAudioWindow(AudioWindow window) async {
     if (_storageBlocked) return;
     try {
+      final endSample =
+          window.endSampleIndex ??
+          (_lastProcessedEndSample == 0
+              ? window.normalizedSamples.length
+              : _lastProcessedEndSample + AppConstants.sampleRate);
+      if (endSample <= _lastProcessedEndSample) return;
+      _lastProcessedEndSample = endSample;
+      final quality = SignalQuality.analyze(window.normalizedSamples);
       InferenceResult? result;
-      if (_containsSignal(window.normalizedSamples)) {
-        if (_lastInferenceAt == null ||
-            window.timestamp.difference(_lastInferenceAt!) >=
-                _inferenceInterval) {
-          final timer = Stopwatch()..start();
-          _latestInference = await _inferenceIsolate!.predict(
-            window.normalizedSamples,
-          );
-          timer.stop();
-          _lastInferenceAt = window.timestamp;
-          // Slow phones classify less often, but retain every PCM sample.
-          final milliseconds = (timer.elapsedMilliseconds * 1.25).ceil();
-          _inferenceInterval = Duration(
-            milliseconds: milliseconds < 1000 ? 1000 : milliseconds,
-          );
-        }
-        result = _latestInference;
-      } else {
-        _latestInference = null;
-        _lastInferenceAt = null;
+      if (quality.isUsable &&
+          (_lastInferredEndSample == null ||
+              endSample - _lastInferredEndSample! >= _inferenceStrideSamples)) {
+        final timer = Stopwatch()..start();
+        result = await _inferenceIsolate!.predict(window.normalizedSamples);
+        timer.stop();
+        _lastInferredEndSample = endSample;
+        final stride =
+            (timer.elapsedMicroseconds *
+                    1.25 *
+                    AppConstants.sampleRate /
+                    1000000)
+                .ceil();
+        _inferenceStrideSamples = stride < AppConstants.sampleRate
+            ? AppConstants.sampleRate
+            : stride;
       }
-      var incident = _incident;
-      if (incident == null) {
-        if (!(result?.isViolenceDetected ?? false)) {
-          _continuationEndSample = null;
-          return;
-        }
-        incident = IncidentRecording(
-          window,
-          result!,
-          maximumDuration: maximumIncidentDuration,
-          afterSample: _continuationEndSample,
+      // Null is an unclassified window, never another vote for an old result.
+      final decision = _detection.observe(
+        endSample: endSample,
+        usableSignal: quality.isUsable,
+        freshResult: result,
+      );
+      if (kDebugMode) {
+        debugPrint(
+          'AudioDetection ${jsonEncode({'end_sample': endSample, 'usable_signal': quality.isUsable, 'centered_rms': quality.isFinite ? quality.centeredRms : null, 'fresh_inference': result != null, 'scores': result?.allScores, 'decision': decision.name})}',
         );
-        _continuationEndSample = null;
-        _incident = incident;
-        _lastDetectedClass = result.label;
-        if (!_disposed) _notify();
-        // First checkpoint persists the trigger window immediately.
-        await _saveIncident(incident);
-      } else {
-        incident.append(window, result);
-        if (incident.durationLimitReached) {
-          await _saveIncident(incident);
-          _incident = null;
-          _continuationEndSample = incident.endSampleIndex;
-          if ((window.endSampleIndex ?? incident.endSampleIndex) >
-                  incident.endSampleIndex &&
-              (result?.isViolenceDetected ?? false)) {
-            final next = IncidentRecording(
-              window,
-              result!,
-              maximumDuration: maximumIncidentDuration,
-              afterSample: incident.endSampleIndex,
-            )..coordinates = incident.coordinates;
-            _incident = next;
-            _continuationEndSample = null;
-            await _saveIncident(next);
+      }
+      switch (decision) {
+        case DetectionDecision.idle:
+          _pendingWindows.clear();
+        case DetectionDecision.candidate:
+          if (_detection.candidateAt == endSample) _pendingWindows.clear();
+          _pendingWindows.add((window, result));
+        case DetectionDecision.confirmed:
+          _pendingWindows.add((window, result));
+          // Replay retained PCM only after a second fresh positive. This keeps
+          // the trigger audio without persisting unconfirmed candidates.
+          for (final (pending, prediction) in _pendingWindows) {
+            await _appendConfirmedWindow(pending, prediction);
           }
-        } else if (incident.shouldClose) {
-          await _saveIncident(incident);
+          _pendingWindows.clear();
+        case DetectionDecision.active:
+          await _appendConfirmedWindow(window, result);
+        case DetectionDecision.close:
+          await _appendConfirmedWindow(window, result, closing: true);
+          _incident?.discard();
           _incident = null;
-          incident.discard();
-        } else if (incident.checkpointDue) {
-          await _saveIncident(incident);
-        }
+          _continuationEndSample = null;
+          _lastConfirmedResult = null;
+          _pendingWindows.clear();
+        case DetectionDecision.ignored:
+          break;
       }
     } catch (error) {
       if (error is StorageCapacityFailure) {
@@ -433,11 +436,44 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     incident.markCheckpoint();
   }
 
-  bool _containsSignal(Float32List samples) {
-    for (final sample in samples) {
-      if (sample != 0) return true;
+  Future<void> _appendConfirmedWindow(
+    AudioWindow window,
+    InferenceResult? result, {
+    bool closing = false,
+  }) async {
+    if (result?.isViolenceDetected ?? false) _lastConfirmedResult = result;
+    final metadata = _lastConfirmedResult!;
+    final isNew = _incident == null;
+    final incident = _incident ??= IncidentRecording(
+      window,
+      metadata,
+      maximumDuration: maximumIncidentDuration,
+      afterSample: _continuationEndSample,
+    );
+    _continuationEndSample = null;
+    if (!isNew) {
+      incident.append(window, result, hasNewClassification: result != null);
+    } else {
+      _lastDetectedClass = metadata.label;
+      if (!_disposed) _notify();
     }
-    return false;
+    if (isNew ||
+        closing ||
+        incident.durationLimitReached ||
+        incident.checkpointDue) {
+      await _saveIncident(incident);
+    }
+    if (incident.durationLimitReached) {
+      final end = incident.endSampleIndex;
+      _incident = null;
+      _continuationEndSample = end;
+      incident.discard();
+      // Continue a confirmed episode across size-limited records, including
+      // unclassified PCM; this does not count as a new detection or vote.
+      if ((window.endSampleIndex ?? end) > end) {
+        await _appendConfirmedWindow(window, result, closing: closing);
+      }
+    }
   }
 
   Future<Map<String, double>> _captureCurrentCoordinates() async {
@@ -545,12 +581,19 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await inferenceIsolate.dispose();
         _inferenceIsolate = null;
-        _latestInference = null;
-        _lastInferenceAt = null;
       } catch (error) {
         errors.add(error);
       }
     }
+
+    // Unconfirmed candidates are never persisted, including on manual stop.
+    _pendingWindows.clear();
+    _detection.reset();
+    _lastConfirmedResult = null;
+    _continuationEndSample = null;
+    _lastInferredEndSample = null;
+    _lastProcessedEndSample = 0;
+    _inferenceStrideSamples = AppConstants.sampleRate;
 
     if (!runInService &&
         (_foregroundServiceStarted || forceForegroundServiceStop)) {
