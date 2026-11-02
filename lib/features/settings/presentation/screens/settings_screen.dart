@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:ui';
 
 import '../../../../app/controllers/app_settings_controller.dart';
@@ -141,6 +142,22 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
 
+                const SizedBox(height: 24),
+                Text(
+                  t('diagnostics_section'),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: primaryColor,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SettingItem(
+                  icon: Icons.monitor_heart_outlined,
+                  title: t('diagnostics_title'),
+                  subtitle: t('diagnostics_settings_subtitle'),
+                  onTap: () => context.push('/settings/diagnostics'),
+                ),
                 const SizedBox(height: 100),
               ],
             ),

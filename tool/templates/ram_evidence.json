@@ -1,0 +1,15 @@
+{
+  "platform": null,
+  "profiler": null,
+  "profiler_version": null,
+  "device_model": null,
+  "os_version": null,
+  "app_version": null,
+  "build_mode": null,
+  "memory_metric": null,
+  "peak_bytes": null,
+  "background_interval_seconds": null,
+  "captured_at_utc": null,
+  "evidence_file": null,
+  "notes": "Complete from an actual physical-device capture; evidence_file is relative to this JSON. Never use a simulated-device value."
+}

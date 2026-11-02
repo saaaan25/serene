@@ -18,9 +18,11 @@ import 'core/services/recorder_leak_guard.dart';
 import 'core/services/device_authentication.dart';
 import 'app/controllers/monitoring_access_controller.dart';
 import 'app/controllers/location_access_controller.dart';
+import 'core/services/diagnostics_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final startupClock = Stopwatch()..start();
 
   // Initialize Hive and set up encrypted evidence storage + app settings
   await Hive.initFlutter();
@@ -39,6 +41,8 @@ void main() async {
   await di.initServiceLocator();
 
   final monitoringController = di.sl<MonitoringController>();
+  DiagnosticsService.instance.monitoringSnapshot =
+      monitoringController.collectDiagnostics;
 
   final sessionManager = SessionManager();
   final deviceAuthentication = DeviceAuthentication();
@@ -56,6 +60,8 @@ void main() async {
   );
   final router = createRouter(sessionManager);
 
+  final bootstrapDuration = startupClock.elapsed;
+  DiagnosticsService.instance.recordStartup(bootstrap: bootstrapDuration);
   runApp(
     MultiProvider(
       providers: [
@@ -82,6 +88,11 @@ void main() async {
   );
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    DiagnosticsService.instance.recordStartup(
+      bootstrap: bootstrapDuration,
+      firstFrame: startupClock.elapsed,
+    );
+    startupClock.stop();
     if (di.sl<AppSettingsController>().monitoringEnabled) {
       unawaited(monitoringController.startMonitoring());
     }

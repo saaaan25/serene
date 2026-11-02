@@ -1,5 +1,11 @@
 # Modelo mixto: contrato de inferencia móvil
 
+## Separación de mediciones
+
+El [benchmark independiente](performance-evaluation.md) está preparado en `tool/evaluate_performance.py`: configura cuatro hilos y consume los lotes originales preprocesados en `.npy`, sin reagrupación. Registra tiempos de invoke y CR en JSON/CSV; requiere artefactos y lotes reales para obtener resultados. Los reportes de la app y criptografía incluyen estas métricas como pendientes, no como ceros.
+
+El diagnóstico móvil accesible desde Settings exporta muestras de proceso y tiempos del flujo de inferencia; no es el benchmark exclusivo de `Interpreter.invoke` en Windows. La [suite criptográfica](cryptographic-evaluation.md) mide cifrado en el host y tampoco sustituye ese benchmark ni tiempos móviles. Para comparar artefactos, CR (%) = (1 − bytes optimizado / bytes FLOAT32) × 100; el tamaño del IPA y la memoria del proceso son magnitudes diferentes. Los máximos observados con muestreo móvil no equivalen a picos medidos por un perfilador.
+
 La app utiliza el modelo de `exports_tflite_mixed`. El archivo empaquetado y el de exportación se compararon por SHA-256:
 
 `f5b94431cada8c946f3c3d87922908740f29e99882abefe22ec70dfff6df693d`
@@ -30,7 +36,7 @@ Además se ejecutó el archivo real con TensorFlow 2.19.0 en el equipo, dos hilo
 | Seno de 440 Hz | 0.99764258 | 0.00102552 | 0.00133186 |
 | Ruido uniforme, semilla 42 | 0.99762446 | 0.00099326 | 0.00138231 |
 
-Los resultados demuestran ejecución, formas y salida numérica; no acreditan calidad de clasificación. El resultado de silencio es un falso positivo sintético. El controlador ya evita invocar el modelo con ventanas exactamente nulas; esto no valida ruido ambiental ni sonidos de bajo volumen. Deben medirse sensibilidad, falsos positivos y comportamiento por clase con audio real, ventanas de cinco segundos y lote uno.
+Los resultados demuestran ejecución, formas y salida numérica; no acreditan calidad. El silencio produce un falso positivo sintético del modelo. El controlador ahora rechaza señales degeneradas mediante RMS centrada (`1/32768`) y exige dos inferencias positivas nuevas, separadas al menos un segundo y dentro de seis. Las ventanas omitidas no reutilizan resultados. La política puede omitir eventos breves y requiere [validación continua](audio-detection-validation.md) con grabaciones del celular.
 
 La prueba nativa de iOS y el rendimiento en el iPhone siguen pendientes. Cambiar el código requiere compilar e instalar un nuevo `.ipa`; no modifica la app ya instalada.
 

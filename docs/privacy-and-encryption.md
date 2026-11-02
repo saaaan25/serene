@@ -1,5 +1,9 @@
 # Protección de registros locales
 
+## Evaluación separada de la aplicación
+
+El [protocolo criptográfico reproducible](cryptographic-evaluation.md) utiliza claves temporales, sin abrir la bóveda personal ni modificar el dataset. Conserva resúmenes, hashes de entradas y logs en `evaluation_results/`, excluido de Git; no conserva claves ni audio. Los hashes permiten correlacionar entradas y no constituyen anonimización. La salida debe revisarse antes de compartirla. El diagnóstico móvil es voluntario y exporta métricas de proceso sin audio, ubicación ni predicciones; no mide tráfico saliente ni acredita ausencia de comunicaciones.
+
 El audio seleccionado y sus metadatos críticos se protegen con AES-GCM de 256 bits antes de persistirse. El audio y los metadatos usan bloques cifrados separados y vinculados: los metadatos canónicos son datos autenticados adicionales del audio. Cada operación obtiene un nonce aleatorio de la biblioteca criptográfica. Esta generación reduce probabilísticamente las colisiones; no se afirma una garantía matemática de unicidad global.
 
 El identificador lógico, el identificador del incidente, las fechas, la clasificación, la confianza y la ubicación autorizada permanecen cifrados. Hive y los archivos de preparación usan una referencia aleatoria independiente. Esta referencia técnica, la versión del formato, los tamaños, los nonces, las etiquetas y el hash complementario son visibles. La referencia técnica no es el identificador lógico del registro.
@@ -18,13 +22,13 @@ Tras confirmar la sustitución se solicita compactación de Hive. Si falla, se r
 
 ## Selección de audio
 
-El monitoreo usa ventanas de cinco segundos solapadas, normalmente con avance de un segundo. Una decisión de violencia abre un incidente y retiene esa ventana; se agregan únicamente las muestras nuevas hasta incluir la primera ventana negativa, que cierra el incidente. Fuera de un incidente activo, el audio normal no crea registros de evidencia ni archivos de audio: permanece en el búfer de memoria y es reemplazado por muestras posteriores.
+El monitoreo usa ventanas completas de cinco segundos y pasos nominales de uno. Una primera positiva retiene un candidato solo en RAM; una segunda inferencia positiva nueva, separada al menos un segundo y dentro de seis, confirma y permite persistir el incidente con su inicio. Solo se agrega PCM nuevo. Una negativa, señal degenerada o más de seis segundos sin nueva positiva cierran el incidente confirmado. Las ventanas omitidas no reutilizan votos. Detener descarta candidatos sin confirmar. Fuera de un incidente confirmado no se crean archivos de audio ni evidencias para ventanas negativas.
 
 ## Acceso y control del micrófono
 
 Configuración incluye un interruptor de monitoreo. Activar y desactivar requieren una autenticación nueva con biometría o credenciales del dispositivo. Cada activación consulta el permiso actual del micrófono; si falta, solicita autorización cuando el sistema lo permite o muestra un acceso a los ajustes del dispositivo. Si se cancela la autenticación o no se concede permiso, no se activa la captura. El estado desactivado se conserva entre aperturas de la aplicación. Este interruptor controla la captura de Serene, no revoca el permiso concedido por el sistema operativo.
 
-Cada entrada a la pestaña de grabaciones requiere autenticación, tanto desde la navegación inferior como desde otros enlaces internos. La pantalla del repositorio no se monta ni consulta sus registros antes de autenticar. Al salir se bloquea y descarta la lista; cancelar el diálogo mantiene la pantalla bloqueada con una opción para reintentar. La reproducción conserva su autenticación adicional.
+Entrar desde otra pestaña a Grabaciones exige autenticación. La pantalla del repositorio no consulta registros antes de aceptarla. Cambiar de pestaña invalida ese acceso; regresar desde el reproductor conserva el acceso a la lista. Abrir cada audio conserva su autenticación adicional. Cancelar mantiene la lista bloqueada con una opción para reintentar.
 
 Eliminar requiere confirmar el diálogo y una autenticación nueva antes de llamar al repositorio. Si se cancela, no se borra ningún registro. Abrir cada audio solicita otra autenticación antes de descifrarlo. PCM y WAV descifrados se procesan en memoria: el PCM se limpia al construir el WAV, el reproductor recibe un flujo de vistas del búfer y el WAV se limpia al cerrar la pantalla. No se crea un archivo temporal legible; solo los contenedores cifrados se conservan en el almacén. Esto no garantiza eliminar todas las copias internas del runtime o del sistema operativo.
 

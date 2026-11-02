@@ -6,8 +6,10 @@ import io.flutter.plugin.common.MethodChannel
 import org.tensorflow.lite.flex.FlexDelegate
 
 class MainActivity : FlutterFragmentActivity() {
+    private var diagnosticsBridge: DiagnosticsBridge? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        diagnosticsBridge = DiagnosticsBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             FLEX_DELEGATE_CHANNEL,

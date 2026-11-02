@@ -1,10 +1,20 @@
 # Serene: descripción técnica de los módulos implementados
 
-**Fecha de actualización:** 27 de octubre de 2026.
+## Evaluación criptográfica y de rendimiento
+
+Los JSON incluyen un contrato `evaluation_metrics` que distingue invoke del host, reducción de almacenamiento y RAM oficial, con valores nulos mientras no exista medición. `tool/evaluate_performance.py` permite medir CR, ejecutar invoke en Windows con cuatro hilos y lotes `.npy` originales, e incorporar una transcripción de RAM vinculada por hash a evidencia del perfilador. La transcripción se marca como externa no verificada automáticamente. El diagnóstico móvil informa máximos muestreados aparte, sin atribuirlos exclusivamente al segundo plano. Véase [protocolo de rendimiento y captura con Mac](performance-evaluation.md), que incluye condiciones y limitaciones de virtualización. El benchmark y la captura reales siguen pendientes de ejecución con los artefactos y dispositivos del experimento.
+
+Se incorpora una [suite reproducible desde el código](cryptographic-evaluation.md), independiente de la interfaz final. `dart run tool/evaluate_crypto.dart` usa entradas sintéticas; `--dataset` permite archivos propios. Cada ejecución genera resultados JSON, muestras de latencia CSV y logs en una carpeta UTC bajo `evaluation_results/`, excluida de Git. Usa AES-256-GCM de `CipherManager`, claves efímeras y un isolate: verifica recuperación byte a byte y rechazo de ciphertext, nonce, tag o AAD modificados, además de una clave incorrecta. Ejecuta también las pruebas existentes de almacenamiento, auditoría, recuperación y capacidad con fixtures separadas.
+
+La tasa de descifrado usa únicamente intentos válidos medidos: recuperaciones exactas / intentos × 100. Los ataques se presentan por separado. Las latencias son tiempos transcurridos dentro del isolate del host, excluyendo lectura, claves y persistencia; no se atribuyen al teléfono ni a tiempo exclusivo de CPU. Se guardan repeticiones, calentamientos excluidos, mediana, p95 y entorno de ejecución. Los resultados experimentales deben obtenerse con el dataset y protocolo definitivos; una ejecución de comprobación no sustituye ese experimento.
+
+La app final conserva **Settings → Diagnóstico → Diagnóstico de rendimiento** para muestreo voluntario de CPU, memoria, batería, estado térmico y tiempos de modelo/guardado, con exportación JSON. No incluye pruebas de manipulación, tráfico de red, tasa criptográfica ni latencia exclusiva de cifrado. El máximo entre muestras no sustituye el máximo de los perfiladores oficiales. La medición móvil de cifrado requiere un harness ejecutado en el dispositivo; la captura de red, un experimento externo controlado. El tiempo de invoke en Windows y CR de los artefactos TFLite son evaluaciones separadas. La compilación y ejecución nativa iOS aún deben verificarse en un IPA real.
+
+**Fecha de actualización:** 1 de noviembre de 2026.
 
 **Versión declarada:** `1.0.0+1`.
 
-**Referencia del código revisado:** `358d0179cd0d188c3d2c16875b14f91b5619097d`.
+**Referencia del código revisado:** árbol de trabajo del 1 de noviembre de 2026, con base en `c43c1a10fc46de708e0280297b6d0d6eb90dcdc0`.
 
 **Objeto del documento:** describir el prototipo disponible en el repositorio para sustentar el apartado de desarrollo e implementación de una investigación.
 
@@ -45,7 +55,7 @@ lib/
     audio_monitoring/      Captura, inferencia y formación de incidentes
     evidence_vault/        Contenedores, auditoría, consulta, reproducción y eliminación
     home/                  Estado operativo y estadísticas
-    settings/              Idioma, apariencia y control del micrófono
+    settings/              Idioma, apariencia, micrófono y ubicación
 ```
 
 `get_it` registra repositorios, fuentes de datos y casos de uso en `service_locator.dart`. `Provider` expone dependencias y objetos `ChangeNotifier` al árbol de widgets. `go_router` define las rutas y redirige a la autenticación cuando no existe una sesión válida. Las dependencias de hardware, autenticación e intérprete se pueden sustituir en pruebas para verificar decisiones sin requerir un teléfono.
@@ -59,7 +69,9 @@ flowchart TD
     C --> D[Inferencia local en isolate]
     D --> E{Decisión de alerta}
     E -->|Negativa y sin incidente| F[Reemplazo posterior en memoria]
-    E -->|Positiva| G[Crear o continuar incidente]
+    E -->|Primera positiva nueva| P[Candidato solo en RAM]
+    P -->|Segunda positiva nueva separada al menos 1 s| G[Confirmar y conservar el inicio]
+    E -->|Positiva con incidente confirmado| G
     E -->|Negativa con incidente activo| N[Incluir muestras nuevas y cerrar]
     G --> H[Agregar muestras nuevas sin duplicar solapamiento]
     H --> I[Cifrar audio y metadatos]
@@ -106,7 +118,9 @@ En un incidente activo también se conserva la ventana que produce la primera de
 | Umbral de alerta | 0,60 | Valor actual de `classificationThreshold` |
 | Hilos del intérprete | Dos | No equivale a dos isolates |
 | Límite de ventanas pendientes | 30 | Protección ante acumulación de trabajo |
-| Puntos de recuperación | Inicial, cada 15 segundos nuevos y al cierre | Versiones completas del incidente |
+| Puntos de recuperación | Tras confirmar, cada 15 segundos nuevos y al cierre | Versiones completas del incidente |
+| Confirmación temporal | Dos inferencias positivas nuevas, separadas al menos 1 s y dentro de 6 s | Política provisional pendiente de calibración |
+| Falta de inferencia nueva | Cierre tras más de 6 s sin positiva nueva | Las ventanas omitidas no son votos |
 | Duración máxima predeterminada | Sin límite configurado | Sujeta a memoria y almacenamiento disponibles |
 | Margen de admisión | 100 MiB más estimación de escritura | Comprobación previa, no reserva física |
 | Inactividad de sesión | 5 minutos | Caducidad del acceso a la interfaz |
@@ -119,7 +133,7 @@ Estos valores se obtienen de `AppConstants`, `EvidencePolicy` y los controladore
 
 La captura proporciona las muestras que consumen el análisis acústico y, cuando existe una alerta, la grabación del incidente. `AudioStreamDataSourceImpl` utiliza el paquete `record` para abrir un flujo de bytes mediante `startStream`, configurado con `AudioEncoder.pcm16bits`, 16 kHz y un canal. El flujo de monitoreo no utiliza la grabación a una ruta de archivo como paso previo a la clasificación.
 
-Antes de iniciar se comprueba el permiso con `hasPermission(request: false)`. Esta comprobación no abre por sí misma un diálogo de autorización. Si existe una sesión de grabación previa se intenta detenerla; ante ciertos fallos de apertura se libera y recrea el grabador para realizar un segundo intento. La configuración solicita pausa y reanudación ante interrupciones compatibles del audio; el resultado real depende del plugin y del sistema operativo.
+Antes de iniciar se comprueba el permiso sin solicitarlo: Android utiliza `Permission.microphone.status` de `permission_handler`, compatible con el contexto sin Activity del servicio; iOS conserva `hasPermission(request: false)` de `record`. Si existe una sesión previa se intenta detenerla; ante ciertos fallos se libera y recrea el grabador para un segundo intento. La configuración solicita pausa y reanudación ante interrupciones compatibles; el resultado depende del plugin y del sistema.
 
 `RecorderLeakGuard` registra identificadores técnicos de grabadores en una caja auxiliar de Hive e intenta liberar los que quedaron registrados en una ejecución anterior. Este registro contiene identificadores de recursos, no muestras de audio, y no garantiza que el sistema operativo pueda recuperar cualquier sesión nativa después de un cierre abrupto.
 
@@ -150,7 +164,7 @@ Esta operación cambia la representación y escala de la señal. No realiza norm
 
 `AudioBufferManager` conserva las 80 000 muestras recientes en un arreglo circular. Al completarse su capacidad, los datos posteriores sustituyen las posiciones más antiguas. `getOrderedSnapshot` reconstruye la ventana en orden temporal, aunque la escritura haya cruzado el final del arreglo. `purge` limpia el arreglo y reinicia sus índices.
 
-`MonitoringRepositoryImpl` mantiene además un acumulador acotado de PCM original, porque la grabación conservada debe proceder de los bytes capturados y no de una reconstrucción de los flotantes. Una vez completa la primera ventana, emite normalmente una nueva ventana cada segundo de muestras recibidas. El tamaño de los bloques entregados por el dispositivo puede modificar la cadencia efectiva.
+`MonitoringRepositoryImpl` conserva PCM original y emite pasos exactos de muestras después de completar la primera ventana. Divide los bloques grandes para emitir todos sus pasos y conserva un byte pendiente cuando un bloque termina a mitad de una muestra PCM16. Las marcas temporales se derivan de las posiciones de muestras, independientemente de cómo el dispositivo agrupe los bloques.
 
 Cada `AudioWindow` incluye las muestras flotantes, el PCM original, una fecha de emisión y `endSampleIndex`, que expresa la posición exclusiva del final de la ventana dentro de la sesión. Este índice permite determinar qué muestras de ventanas superpuestas ya se incorporaron al incidente. Al detener el flujo se puede emitir el último avance pendiente antes de purgar los búferes.
 
@@ -212,7 +226,7 @@ El repositorio también contiene `tool/export_wav2vec_tflite.py`, una herramient
 
 Esta separación evita ejecutar la inferencia sincrónica en el isolate que dibuja la interfaz. No implica que toda la aplicación sea paralela ni que cada ventana se procese simultáneamente. `MonitoringController` serializa las ventanas con una cadena de tareas para conservar el orden del audio y de sus decisiones.
 
-El controlador mide la duración de predicción y ajusta el intervalo mínimo entre inferencias a `máximo(1000 ms, 1,25 × duración observada)`. Si una nueva ventana llega antes de ese intervalo puede reutilizar la predicción disponible. Se mantiene la captura de muestras para el incidente activo, pero no se debe afirmar una predicción nueva por segundo en todos los teléfonos. Si se acumulan 30 ventanas pendientes, el controlador informa que el procesamiento no mantiene el ritmo y activa su manejo de interrupción y reintento.
+El controlador ajusta la separación mínima entre inferencias a `máximo(1 s, 1,25 × duración observada)`, expresada en posiciones de muestras. Las ventanas omitidas conservan PCM de un incidente confirmado, pero no reutilizan predicciones, no aportan votos y no equivalen a negativas. `DetectionPolicy` limita candidatos e incidentes sin resultados nuevos. Si se acumulan 30 ventanas se activa el manejo de interrupción y reintento.
 
 Los estados operativos son `idle`, `initializing`, `active`, `paused` y `error`. Los contadores de generación permiten invalidar un inicio pendiente cuando se solicita detener el monitoreo o se abandona una fase de inicio que no puede continuar. La falta de espacio bloquea nuevas escrituras y no se trata como un error que deba reintentarse indefinidamente.
 
@@ -236,17 +250,17 @@ Las declaraciones de permisos incluyen micrófono, ubicación durante el uso y F
 
 ### 8.1. Inicio, continuidad y cierre
 
-Una decisión positiva crea `IncidentRecording` e incorpora el PCM completo de la ventana que produjo la alerta. Las ventanas siguientes se agregan usando `endSampleIndex`: solo se añaden las muestras posteriores a la última posición conservada. Así, varias ventanas superpuestas forman un audio continuo sin repetir sus tramos compartidos.
+La primera inferencia positiva retiene un candidato solo en RAM. Dos inferencias positivas nuevas, separadas al menos un segundo y dentro de seis, confirman el incidente. Se incorpora el audio retenido desde la primera ventana usando `endSampleIndex`, sin perder el inicio ni duplicar muestras. Una negativa, señal degenerada o expiración descartan el candidato; detener el monitoreo tampoco lo guarda.
 
-El incidente permanece abierto mientras las decisiones disponibles sean positivas. La primera decisión negativa incorpora sus muestras nuevas y cierra el incidente. En el código, una decisión negativa puede corresponder a `no_violence`, a una etiqueta de violencia por debajo del umbral o a una ventana exactamente nula que no se envía al modelo. Por ello, el cierre no se debe describir exclusivamente como una etiqueta `no_violence`.
+El incidente confirmado termina con una negativa nueva, una señal degenerada o más de seis segundos sin positiva nueva, conservando el contexto final. Una negativa puede corresponder a `no_violence` o a una etiqueta de violencia por debajo del umbral. Las ventanas omitidas por el intervalo adaptativo no cuentan como positivas ni negativas.
 
-Las ventanas nulas se identifican comprobando que todas las muestras sean cero; no existe un detector general de actividad de voz ni un umbral acústico de silencio. En teléfonos lentos puede reutilizarse la predicción anterior hasta la siguiente inferencia efectiva. La fecha de cierre y el contexto conservado deben analizarse junto con esta política temporal.
+`SignalQuality` rechaza valores inválidos, fuera de escala y RMS centrada no superior a `1/32768`, incluyendo silencio y desplazamiento constante. No exige voz ni constituye un umbral de ruido ambiental calibrado. Las ventanas solapadas están correlacionadas: esta confirmación provisional puede conservar falsos positivos persistentes y omitir eventos breves. Los intervalos requieren calibración con grabaciones continuas del celular; véase [validación de la detección](audio-detection-validation.md).
 
 La etiqueta y confianza representativas del incidente corresponden a la predicción positiva de mayor confianza observada, no al promedio ni a una clasificación nueva de toda la grabación acumulada. La fecha de inicio se estima a partir de la fecha de la ventana y de la duración de las muestras inicialmente incorporadas.
 
 ### 8.2. Versiones y puntos de recuperación
 
-Se realiza un primer guardado de la ventana de alerta, otro cada 15 segundos nuevos de audio y un guardado final al cerrar o detener normalmente el monitoreo. Cada guardado cifra una instantánea completa y crea una versión con identificador propio, fecha de guardado y referencia a la versión anterior. Las escrituras del repositorio se serializan para conservar su orden.
+Después de confirmar se realiza el primer guardado del audio retenido, otro cada 15 segundos nuevos y uno final al cerrar o detener normalmente el monitoreo. Cada guardado cifra una instantánea completa y crea una versión con identificador propio, fecha y referencia a la anterior. Las escrituras se serializan para conservar su orden.
 
 La bóveda muestra la última versión por incidente; las versiones anteriores permanecen hasta su eliminación. Si las fechas empatan, el repositorio favorece la versión con mayor longitud de audio cifrado, lo que conserva el comportamiento esperado para instantáneas antiguas con fechas iguales. Una interrupción abrupta puede perder las muestras posteriores al último guardado confirmado.
 
@@ -268,7 +282,7 @@ Cada versión incorpora identificador lógico, identificador del incidente, fech
 
 `EvidenceProvenance` obtiene la versión y número de compilación instalados mediante `package_info_plus`. Calcula el SHA-256 sobre los bytes reales del recurso `model.tflite` y reutiliza el resultado durante la ejecución. Este dato permite relacionar el registro con una versión concreta del archivo del modelo; no acredita que la predicción sea correcta.
 
-La ubicación se intenta obtener una vez por incidente mediante `geolocator`, después de comprobar que el servicio esté disponible y que exista autorización. En primer plano se puede solicitar permiso; el trabajador de segundo plano evita abrir ese diálogo. Si no existe permiso, el servicio está apagado o la consulta falla, el incidente se guarda sin coordenadas.
+La ubicación es una preferencia independiente, desactivada por defecto (`locationEnabled`). `LocationSetting` y `LocationAccessController` autentican sus cambios y solicitan permiso desde la interfaz, con acceso a Ajustes si está bloqueado y mensaje específico para GPS apagado. Inicio puede restablecer permisos faltantes de una preferencia habilitada. La captura solo comprueba servicio y permiso, sin abrir diálogos; ante indisponibilidad guarda sin coordenadas. Android añade el tipo de servicio `location` cuando corresponde y lo reconfigura al cambiar la preferencia. iOS utiliza autorización durante el uso y `BYPASS_PERMISSION_LOCATION_ALWAYS=1`, sin solicitar acceso permanente. Desactivar no añade coordenadas pendientes a nuevas versiones; los registros anteriores conservan sus datos.
 
 La solicitud utiliza precisión media y un límite de espera de diez segundos. Las coordenadas corresponden a la consulta disponible durante el guardado, no a un seguimiento continuo del recorrido ni necesariamente al instante exacto de inicio del audio. Tanto fechas como ubicación dependen del dispositivo y no constituyen un sello temporal o geográfico externo.
 
@@ -393,7 +407,7 @@ La protección nueva comienza con la migración: no demuestra retrospectivamente
 | Eliminar una grabación | Diálogo de confirmación y después autenticación nueva |
 | Activar o desactivar el monitoreo desde Configuración o su flujo de reintento | Autenticación nueva y controles de permiso correspondientes |
 
-`VaultAccessGate` observa la ruta de navegación y no monta la pantalla que consulta el repositorio hasta aceptar la autenticación. Salir a otra pestaña invalida ese acceso; volver exige autenticar de nuevo aunque la navegación conserve otras ramas de la interfaz. Si se cancela, la lista permanece bloqueada con una opción para reintentar.
+`VaultAccessGate` observa la ruta y no monta la consulta antes de autenticar. Cambiar a otra pestaña invalida ese acceso; volver exige autenticar aunque se conserven ramas de navegación. La ruta del reproductor pertenece al mismo ámbito: regresar de un audio conserva la autorización de la lista, mientras abrir cada audio mantiene su autenticación propia. Cancelar mantiene la lista bloqueada con opción de reintento.
 
 La eliminación solo llega al repositorio después de confirmar y autenticar. Mientras se procesa una eliminación se deshabilitan nuevas acciones de borrado para evitar solicitudes concurrentes. Cancelar el diálogo o la autenticación no retira el registro. La protección de estas acciones corresponde al flujo de interfaz; las operaciones internas de recuperación o migración no abren diálogos biométricos.
 
@@ -423,7 +437,7 @@ El WAV se construye en un `Uint8List` en memoria: añade una cabecera de 44 byte
 
 ### 15.3. Fuente multimedia volátil
 
-`InMemoryAudioSource` implementa `StreamAudioSource` de `just_audio`. Atiende rangos de bytes del WAV mediante vistas `Uint8List.sublistView`, evitando crear una copia completa por cada solicitud. `InMemoryAudioPlayer` proporciona reproducción, pausa, desplazamiento y visualización de tiempo.
+`InMemoryAudioSource` implementa `StreamAudioSource` de `just_audio` y sirve rangos mediante vistas `Uint8List.sublistView`. El reproductor permite pausa, retorno al inicio y repetición automática opcional. La barra se actualiza mientras se arrastra y solicita el salto al soltar; los saltos se procesan en orden sin recargar ni descifrar de nuevo el audio.
 
 El flujo no utiliza un archivo WAV temporal legible ni un mecanismo de caché a archivo para reproducir el audio descifrado. Al cerrar la pantalla se sobrescribe el búfer WAV controlado por la aplicación y se retira su referencia; el widget libera el reproductor. Las pruebas también comprueban que un descifrado terminado después de cerrar la pantalla no deje su resultado disponible para reproducir.
 
@@ -437,7 +451,7 @@ La navegación principal comprende Inicio, Grabaciones y Configuración. `Bottom
 
 Inicio presenta el estado del monitoreo, la última etiqueta detectada, el estado de sesión y estadísticas del almacén. Los estados de error permiten consultar el detalle y reintentar el flujo de activación. La última etiqueta mostrada es un estado del controlador, no una nueva verificación del contenido de todos los registros guardados.
 
-Configuración permite seleccionar español o inglés, apariencia clara u oscura y la preferencia de monitoreo. `AppSettingsController` conserva esos valores en `appSettings`; el adaptador utiliza valores predeterminados al leer preferencias de formatos anteriores. `AppTranslations` centraliza mensajes y motivos de autenticación. El tema utiliza Material 3.
+Configuración permite seleccionar idioma, apariencia y preferencias independientes de micrófono y ubicación. `AppSettingsController` persiste los valores y conserva compatibilidad con versiones anteriores. Los íconos de sus filas comparten fondo circular. `AppTranslations` centraliza mensajes. La marca vive en `assets/icons`: cabeceras horizontales de 112 px con variantes clara/oscura y separación adicional de 6 px; la cubierta de privacidad usa el logo normal a 180 px. Los íconos de instalación se generan desde `logo_wo_text.png`, sin texto y sobre blanco, mediante `tool/generate_launcher_icons.ps1`. Auth utiliza distribución centrada y un símbolo de acceso protegido independiente de la marca.
 
 La interfaz incorpora confirmaciones y mensajes de cancelación o fallo. La presencia de estos elementos no acredita por sí misma accesibilidad, comprensión de permisos o facilidad de uso: esos atributos requieren una evaluación con un protocolo y participantes definidos.
 
@@ -504,7 +518,7 @@ La compilación iOS requiere un entorno macOS/Xcode; no se produce de forma nati
 
 ### 19.1. Pruebas automatizadas
 
-El 27 de octubre de 2026 se ejecutó la suite completa con `flutter test --no-pub`: **159 pruebas finalizaron correctamente**. Este resultado corresponde al código revisado y no debe extrapolarse a compilaciones posteriores sin repetir la verificación.
+Como antecedente, el 27 de octubre de 2026 finalizaron correctamente 159 pruebas. La revisión posterior incorpora pruebas de calidad de señal, confirmación temporal, inferencias omitidas, expiración, bloques PCM irregulares, ubicación y regreso desde el reproductor. Los recuentos históricos no deben extrapolarse a una compilación nueva sin ejecutar su suite. La verificación de software no acredita precisión predictiva ni rendimiento nativo.
 
 | Área | Escenarios comprobados | Alcance de la evidencia |
 | --- | --- | --- |
@@ -535,7 +549,7 @@ Durante la integración se ejecutó `tool/check_mobile_model.py` con el archivo 
 | Seno de 440 Hz | 0.99764258 | 0.00102552 | 0.00133186 |
 | Ruido uniforme con semilla 42 | 0.99762446 | 0.00099326 | 0.00138231 |
 
-La salida del silencio constituye un falso positivo sintético. El controlador evita enviar ventanas exactamente nulas, pero eso no valida ruido ambiental, entradas de baja amplitud ni silencio capturado con un micrófono real. Los resultados solo acreditan ejecución y semántica numérica del contrato en el equipo. No son una evaluación de sensibilidad, especificidad o calidad móvil.
+La salida del silencio constituye un falso positivo sintético del modelo. El controlador rechaza ahora señales degeneradas con RMS centrada y exige confirmación temporal. Esto no valida ruido ambiental ni garantiza detectar eventos breves. Los resultados sintéticos solo acreditan ejecución y semántica numérica del contrato, no calidad móvil.
 
 El contrato de exportación registra validación con lotes de cuatro y un límite de 14 segundos. Esos antecedentes no demuestran calidad en ventanas móviles de cinco segundos y lote uno. La compatibilidad y el rendimiento del runtime iOS 2.17.0 deben verificarse en el iPhone; la ejecución del equipo utilizó TensorFlow 2.19.0.
 

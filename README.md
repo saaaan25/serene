@@ -1,8 +1,23 @@
 # Serene
 
+## Evaluación y reportes
+
+Los JSON incluyen `evaluation_metrics` con valores pendientes explícitos (`null`). Para CR, benchmark de invoke de Windows y captura de RAM oficial, consultar [evaluación de rendimiento, Mac y VM](docs/performance-evaluation.md). `python tool/evaluate_performance.py` crea un reporte independiente; admite artefactos TFLite, lotes `.npy` originales y evidencia externa del perfilador.
+
+Las pruebas criptográficas se ejecutan desde el código, sin herramientas de manipulación en la app final:
+
+```powershell
+dart run tool/evaluate_crypto.dart
+dart run tool/evaluate_crypto.dart --dataset "D:\datasets\audios" --repetitions 10
+```
+
+Cada ejecución guarda JSON, CSV de tiempos y logs en `evaluation_results/<fecha UTC>/` (ignorado por Git). Las dos variantes son alternativas: datos sintéticos o dataset propio. Véase [protocolo, resultados y limitaciones](docs/cryptographic-evaluation.md). Los tiempos corresponden al host, no al teléfono.
+
+En la app, **Settings → Diagnóstico → Diagnóstico de rendimiento** permite iniciar una medición voluntaria y exportar JSON de CPU, memoria, batería, estado térmico y tiempos del procesamiento. No contiene pruebas criptográficas ni mide tráfico de red o cifrado exclusivo. La validación nativa iOS sigue pendiente en un IPA real.
+
 Serene es un prototipo Flutter para monitorear audio ambiental, ejecutar clasificación local de tres categorías y conservar incidentes mediante cifrado autenticado. Las etiquetas del modelo son `no_violence`, `physical_violence` y `verbal_violence`; son predicciones acústicas y no una constatación independiente de violencia.
 
-**Documentación actualizada el 27 de octubre de 2026.**
+**Documentación actualizada el 1 de noviembre de 2026.**
 
 ## Documentación para la investigación
 
@@ -15,14 +30,15 @@ Documentos complementarios:
 - [Retención, capacidad y eliminación](docs/evidence-retention.md).
 - [Integración del modelo y prueba sintética](docs/mobile-model-integration.md).
 - [Contrato del modelo mixto](docs/mobile-model-contract.json).
+- [Política y validación de audio continuo](docs/audio-detection-validation.md).
 
 ## Funcionamiento actual
 
 La captura utiliza PCM16 mono a 16 kHz. El análisis utiliza ventanas de cinco segundos, con un avance nominal de un segundo. La aplicación convierte el PCM a flotantes en `[-1,1]` y conserva las muestras recientes en un búfer circular.
 
-Una decisión de violencia con confianza de al menos 0,60 inicia un incidente e incluye la ventana que produjo la alerta. Las ventanas siguientes aportan únicamente sus muestras nuevas, sin duplicar los segmentos superpuestos. Se incluye la primera ventana con decisión negativa y se cierra el incidente. Una decisión negativa también puede corresponder a una etiqueta de violencia por debajo del umbral; las ventanas exactamente nulas no se envían al modelo.
+Una primera predicción positiva con confianza mínima de 0,60 crea un candidato en RAM. Dos inferencias positivas nuevas, separadas al menos un segundo y dentro de seis, confirman el incidente conservando su inicio. `SignalQuality` rechaza señales inválidas y RMS centrada no superior a una unidad PCM16, sin exigir voz. Las ventanas no clasificadas no son votos; una negativa, señal degenerada o más de seis segundos sin positiva nueva cierran el incidente confirmado. Se añade únicamente PCM nuevo. La política requiere calibración con audio continuo real y puede omitir eventos breves.
 
-El incidente se guarda inicialmente, cada quince segundos nuevos y al finalizar. Cada guardado crea una versión cifrada completa; la interfaz muestra la última versión de cada incidente. No existe límite predeterminado de duración, pero la memoria y el almacenamiento son finitos y las versiones intermedias aumentan el espacio ocupado.
+El incidente se guarda después de confirmarse, cada quince segundos nuevos y al finalizar. Detener no persiste candidatos sin confirmar. Cada guardado crea una versión cifrada completa; la interfaz muestra la última por incidente. No existe límite predeterminado de duración, pero memoria y almacenamiento son finitos y las versiones intermedias aumentan el espacio ocupado.
 
 Fuera de un incidente no se crean archivos de audio ni registros de evidencia para ventanas negativas. Esto no significa ausencia de toda escritura: preferencias y datos técnicos de recursos también se persisten.
 
@@ -33,6 +49,10 @@ El acceso inicial utiliza biometría o credenciales del dispositivo. La sesión 
 Configuración permite activar o desactivar el monitoreo con una autenticación nueva. Cada activación vuelve a comprobar el permiso del micrófono, lo solicita cuando es posible o permite abrir los ajustes del dispositivo. La desactivación se conserva entre aperturas. La preferencia predeterminada es activada y el arranque intenta iniciar la captura solo si esa configuración y los permisos lo permiten.
 
 Entrar a la lista de grabaciones, escuchar cada audio y confirmar una eliminación requieren autenticación adicional. Cancelar no permite consultar, descifrar o eliminar mediante esos flujos. La reproducción construye PCM/WAV en memoria y utiliza `StreamAudioSource`, sin crear deliberadamente un archivo temporal legible. Se limpian los búferes controlados por la app, sin prometer eliminación de todas las copias del runtime o del sistema operativo.
+
+La ubicación tiene una preferencia independiente, desactivada por defecto y con cambio autenticado. Solicita permiso desde la interfaz y distingue bloqueo y GPS apagado. Inicio puede restablecer permisos faltantes de preferencias habilitadas. Volver del reproductor conserva el acceso a la lista; cada audio mantiene su autenticación. La reproducción permite pausa, salto al soltar la barra, retorno al inicio y repetición.
+
+Los logos viven en `assets/icons`, con variantes claras/oscuras: cabeceras horizontales y cubierta de privacidad normal. Los íconos de instalación proceden de `logo_wo_text.png`, sin texto y sobre blanco, mediante `tool/generate_launcher_icons.ps1`.
 
 ## Protección y almacenamiento
 
@@ -99,4 +119,4 @@ Para ejecutar el archivo real del modelo con señales sintéticas de cinco segun
 python -B tool/check_mobile_model.py
 ```
 
-La prueba registrada ejecutó tres señales en el equipo, pero no demuestra calidad con audio real. El silencio absoluto produjo un falso positivo sintético de violencia física; la app omite ventanas exactamente nulas, lo que no resuelve la evaluación de ruido o silencio de micrófono. Siguen pendientes calidad predictiva, latencia, consumo, continuidad y pruebas de la nueva compilación en teléfonos, además de la verificación específica del temporizador de inactividad.
+La prueba registrada ejecutó tres señales sintéticas, sin acreditar calidad con audio real. El silencio produjo un falso positivo del modelo; ahora la app rechaza señales degeneradas mediante RMS centrada y exige confirmación temporal. Siguen pendientes calibración con grabaciones continuas, rendimiento, consumo y continuidad en la nueva compilación móvil.

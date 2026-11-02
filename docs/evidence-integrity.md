@@ -1,5 +1,9 @@
 # Integridad y trazabilidad local de evidencias
 
+## Evaluación con resultados exportados
+
+La [suite criptográfica](cryptographic-evaluation.md) permite evaluar `CipherManager` con bytes sintéticos o archivos del dataset y conservar resultados JSON, tiempos CSV y logs fuera de Git. Ejecuta también las pruebas de persistencia e integridad existentes. El dataset se usa para roundtrip y ataques a copias en memoria; las pruebas de Hive usan fixtures independientes y almacenamiento seguro simulado. No se añaden pruebas destructivas a la aplicación final.
+
 La política operativa de duración, espacio, temporales y eliminación se detalla en [evidence-retention.md](evidence-retention.md).
 
 La implementación ofrece un **mecanismo técnico de integridad y trazabilidad reforzada**. Funciona localmente, sin roles, servidores ni firmas digitales por hardware. No establece validez judicial, autoría independiente ni la exactitud del reloj del dispositivo.

@@ -21,10 +21,18 @@ class MonitoringForegroundService {
   Stream<Map<String, dynamic>> get events => _events.stream;
   Completer<void>? _ready;
   Completer<void>? _stopped;
+  int _diagnosticRequest = 0;
+  final Map<int, Completer<Map<String, Object?>>> _diagnostics = {};
 
   void _onData(Object data) {
     if (data is! Map) return;
     final event = Map<String, dynamic>.from(data);
+    if (event['diagnostics'] is Map) {
+      _diagnostics
+          .remove(event['diagnosticRequest'])
+          ?.complete(Map<String, Object?>.from(event['diagnostics'] as Map));
+      return;
+    }
     _events.add(event);
     if (event['status'] == 'active' && !(_ready?.isCompleted ?? true)) {
       _ready!.complete();
@@ -108,6 +116,27 @@ class MonitoringForegroundService {
   void requestStatus() {
     if (Platform.isAndroid) {
       FlutterForegroundTask.sendDataToTask({'command': 'status'});
+    }
+  }
+
+  Future<Map<String, Object?>?> collectDiagnostics() async {
+    if (!Platform.isAndroid || !await FlutterForegroundTask.isRunningService) {
+      return null;
+    }
+    initialize();
+    final request = ++_diagnosticRequest;
+    final completer = Completer<Map<String, Object?>>();
+    _diagnostics[request] = completer;
+    FlutterForegroundTask.sendDataToTask({
+      'command': 'diagnostics',
+      'request': request,
+    });
+    try {
+      return await completer.future.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      return null;
+    } finally {
+      _diagnostics.remove(request);
     }
   }
 
@@ -218,6 +247,13 @@ class _MonitoringTaskHandler extends TaskHandler {
   void onReceiveData(Object data) {
     if (data is! Map) return;
     if (data['command'] == 'status') _sendStatus();
+    if (data['command'] == 'diagnostics') {
+      FlutterForegroundTask.sendDataToMain({
+        'diagnosticRequest': data['request'],
+        'diagnostics':
+            _controller?.localDiagnosticSnapshot() ?? <String, Object?>{},
+      });
+    }
     if (data['command'] == 'stop') {
       unawaited(
         _stop().catchError((Object error) {

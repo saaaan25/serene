@@ -1,10 +1,14 @@
 # Política de retención, capacidad y eliminación
 
+## Evidencia experimental
+
+La [suite de evaluación criptográfica](cryptographic-evaluation.md) conserva también el resultado de las pruebas de capacidad, eliminación, compactación y recuperación existentes. No equivale a una prueba de borrado forense ni ejecuta una política de vencimiento automático. Sus salidas están en `evaluation_results/`, fuera de los assets y excluidas de Git. No se eliminan automáticamente: el investigador decide su conservación y archivado.
+
 | Aspecto | Política aplicada |
 | --- | --- |
 | Retención predeterminada | Hasta eliminación manual por el usuario. Sin vencimiento por antigüedad. |
 | Revisión y eliminación automática | No se implementa borrado automático de evidencias. Se recomienda revisión manual periódica, por ejemplo mensual, y antes de quedarse sin espacio. La recuperación y limpieza de temporales confirmados son mantenimiento, no eliminación automática de evidencias. |
-| Duracion maxima por incidente | Sin limite predeterminado; termina al incluir la primera ventana negativa. |
+| Duracion maxima por incidente | Sin limite predeterminado; tras confirmar, cierra con una negativa, señal degenerada o expiración sin positiva nueva. |
 | Falta de espacio | Antes de guardar se consulta el volumen correspondiente. Se exige margen de 100 MiB más una estimación conservadora para la escritura, cifrado/JSON, WAL e importación. No se reemplazan ni se borran evidencias para liberar espacio. |
 | Diario temporal | Archivos cifrados de transferencia entre el servicio y el almacén definitivo. Sin caducidad automática de archivos completos pendientes. Se retiran tras importación auditada confirmada. |
 | Eliminación | Eliminar un registro visible elimina todas las versiones de ese incidente, registra la operación en la auditoría y solicita compactación de Hive. No elimina otros incidentes ni segmentos consecutivos con otro ID. |
@@ -12,7 +16,7 @@
 
 ## Duracion y cierre del incidente
 
-No hay limite de duracion predeterminado. Se retiene la ventana de cinco segundos que activa la alerta y se agregan las muestras nuevas sin duplicar el solapamiento, hasta incluir la primera ventana negativa. Fuera de un incidente, el audio normal solo permanece en memoria y se reemplaza con datos posteriores.
+No hay limite de duracion predeterminado. El candidato queda solo en RAM hasta dos inferencias positivas nuevas, separadas al menos un segundo y dentro de seis. Se conserva el inicio y se añade PCM nuevo sin duplicar solapamiento. Una negativa, señal degenerada o más de seis segundos sin positiva nueva cierran el incidente confirmado. Detener descarta candidatos sin confirmar. Las ventanas sin inferencia no son votos. Fuera de un incidente confirmado, el audio permanece en memoria y se reemplaza con datos posteriores.
 
 La interfaz muestra un unico incidente con puntos de recuperacion cifrados. El PCM ocupa 32 000 bytes por segundo; los snapshots completos cada quince segundos aumentan el almacenamiento acumulado. La memoria y el espacio fisico siguen siendo limitados. Una interrupcion recupera el ultimo guardado confirmado.
 

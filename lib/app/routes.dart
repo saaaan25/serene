@@ -12,6 +12,7 @@ import 'package:serene/app/controllers/app_settings_controller.dart';
 import 'package:serene/core/localization/app_translations.dart';
 import 'package:provider/provider.dart';
 import '../features/evidence_vault/presentation/widgets/vault_access_gate.dart';
+import '../features/settings/presentation/screens/diagnostics_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -88,6 +89,12 @@ GoRouter createRouter(SessionManager sessionManager) {
               GoRoute(
                 path: '/settings',
                 name: 'settings',
+                routes: [
+                  GoRoute(
+                    path: 'diagnostics',
+                    builder: (context, state) => const DiagnosticsScreen(),
+                  ),
+                ],
                 pageBuilder: (context, state) => MaterialPage<void>(
                   key: state.pageKey,
                   child: const SettingsScreen(),

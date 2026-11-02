@@ -8,6 +8,7 @@ import '../../../../core/services/monitoring_foreground_service.dart';
 import '../../../../core/constants/evidence_policy.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/dsp/signal_quality.dart';
+import '../../../../core/services/diagnostics_service.dart';
 import '../../domain/detection_policy.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../evidence_vault/domain/usecases/save_encrypted_evidence_usecase.dart';
@@ -104,6 +105,24 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
   String get lastDetectedClass => _lastDetectedClass;
   bool get isMonitoring => _status == MonitoringStatus.active;
   bool get isStorageBlocked => _storageBlocked;
+
+  Map<String, Object?> localDiagnosticSnapshot() => {
+    'status': _status.name,
+    'queued_windows': _queuedWindows,
+    'pending_confirmation_windows': _pendingWindows.length,
+    'incident_pcm_bytes': _incident?.length ?? 0,
+    'runtime': DiagnosticsService.instance.timingSnapshot(),
+  };
+
+  Future<Map<String, Object?>> collectDiagnostics() async {
+    if (_usesAndroidService) {
+      return {
+        'ui_status': _status.name,
+        'worker': await _foregroundService.collectDiagnostics(),
+      };
+    }
+    return localDiagnosticSnapshot();
+  }
 
   bool get _usesAndroidService => Platform.isAndroid && !runInService;
 
@@ -246,7 +265,12 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('Initializing TensorFlow Lite inference worker.');
 
       _inferenceIsolate = _inferenceFactory();
+      final initializeClock = Stopwatch()..start();
       await _inferenceIsolate!.initialize();
+      DiagnosticsService.instance.recordDuration(
+        'model_initialize',
+        initializeClock.elapsed,
+      );
       if (generation != _startGeneration) return;
       debugPrint('TensorFlow Lite inference worker is ready.');
 
@@ -290,6 +314,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         startupError = '$error; resource cleanup also failed: $cleanupError';
       }
       _status = MonitoringStatus.error;
+      DiagnosticsService.instance.recordFailure('monitoring_start_failures');
       _errorMessage = startupError.toString();
       debugPrint('Audio monitoring startup failed: $startupError');
       _notify();
@@ -355,6 +380,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         final timer = Stopwatch()..start();
         result = await _inferenceIsolate!.predict(window.normalizedSamples);
         timer.stop();
+        DiagnosticsService.instance.recordDuration('inference', timer.elapsed);
         _lastInferredEndSample = endSample;
         final stride =
             (timer.elapsedMicroseconds *
@@ -404,6 +430,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
           break;
       }
     } catch (error) {
+      DiagnosticsService.instance.recordFailure('processing_failures');
       if (error is StorageCapacityFailure) {
         _storageBlocked = true;
         _monitoringRequested = false;
@@ -423,6 +450,7 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
     // A permission dialog or a location fix can finish after the switch changes.
     final coordinates = _locationEnabled ? captured : <String, double>{};
     incident.coordinates = coordinates;
+    final saveClock = Stopwatch()..start();
     await _saveEvidenceUseCase(
       SaveEncryptedEvidenceParams(
         rawAudioBytes: incident.snapshot(),
@@ -432,6 +460,10 @@ class MonitoringController extends ChangeNotifier with WidgetsBindingObserver {
         evidenceId: incident.id,
         startedAt: incident.startedAt,
       ),
+    );
+    DiagnosticsService.instance.recordDuration(
+      'evidence_save',
+      saveClock.elapsed,
     );
     incident.markCheckpoint();
   }
