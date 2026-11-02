@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../app/controllers/app_settings_controller.dart';
 import '../core/services/session_manager.dart';
 import 'routes.dart';
+import 'widgets/serene_logo.dart';
 
 /// Root application widget
 /// Configures Material theme with dynamic dark/light mode, router, and providers
@@ -340,18 +341,12 @@ class _AppPrivacyGuardState extends State<_AppPrivacyGuard>
         ColoredBox(
           color: theme.scaffoldBackgroundColor,
           child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.shield, color: theme.colorScheme.primary, size: 32),
-                const SizedBox(width: 12),
-                Text(
-                  'serene',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: const SereneLogo(),
+              ),
             ),
           ),
         ),

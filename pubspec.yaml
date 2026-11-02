@@ -80,6 +80,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
+    - assets/icons/
     - assets/models/model.tflite
     - assets/labels/labels.txt
 

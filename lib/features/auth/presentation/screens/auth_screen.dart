@@ -4,6 +4,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/controllers/app_settings_controller.dart';
+import '../../../../app/widgets/serene_logo.dart';
 import '../../../../core/localization/app_translations.dart';
 import '../../../../core/services/session_manager.dart';
 
@@ -110,24 +111,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.shield_rounded,
-                          color: primaryColor,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'serene',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: onSurfaceColor,
-                                letterSpacing: -0.4,
-                              ),
-                        ),
-                      ],
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: SereneLogo.horizontal(),
                     ),
                     const SizedBox(height: 40),
                     Expanded(
